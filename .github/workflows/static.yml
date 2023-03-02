@@ -35,6 +35,8 @@ jobs:
           version: 0.10.1
       - name: compile index.wasm
         run: zig build
+      - name: move index.wasm to root
+        run: mv ./zig-out/bin/index.wasm .
       - name: set up pages
         uses: actions/configure-pages@v3
       - name: upload artifact
