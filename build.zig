@@ -32,6 +32,7 @@ pub fn build(b: *std.build.Builder) void {
     lib.addIncludePath("./include");
     lib.setBuildMode(mode);
     lib.setTarget(target);
+    lib.setOutputDir(".");
     lib.install();
 
     // const main_tests = b.addTest("src/main.zig");
