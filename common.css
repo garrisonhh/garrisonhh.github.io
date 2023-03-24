@@ -1,0 +1,110 @@
+:root {
+    /* palette colors */
+    /* https://lospec.com/palette-list/oasis-klub-8 */
+    --pal-deepblue: #2323c7;
+    --pal-pastelblue: #7f70ff;
+    --pal-lila: #c735fb;
+    --pal-rosa: #dc65b1;
+    --pal-bluegreen: #00a8b1;
+    --pal-green: #37cfb7;
+    --pal-sand: #e3d170;
+    --pal-khaki: #fef3c0;
+
+    /* targeted colors */
+    --link-color: var(--pal-pastelblue);
+    --color-fg: #D7D7D7;
+    --color-bg: #232323;
+}
+
+body {
+    /* flex */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    flex-direction: column;
+
+    /* font stuff */
+    font-family: Impact, Haettenschweiler, 'Arial Narrow Bold', sans-serif;
+    color: var(--color-fg);
+    background-color: var(--color-bg);
+}
+
+a, a:visited {
+    color: var(--link-color);
+}
+
+#header {
+    --header-space: 0.25rem;
+
+    /* flex */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    /* button spacing */
+    padding: var(--header-space);
+}
+
+button.header-link {
+    /* flex */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    /* colors */
+    background-color: var(--color-bg);
+    color: var(--color-fg);
+
+    /* border */
+    border: solid;
+    border-color: var(--color-fg);
+    border-radius: 10px;
+    border-width: 2px;
+
+    /* spacing */
+    margin: var(--header-space);
+}
+
+.linkbox-wrapper {
+    /* flex */
+    display: inline-flex;
+    align-content: center;
+    justify-content: space-around;
+
+    flex-direction: row;
+
+    width: 100%;
+}
+
+.linkbox {
+    /* flex */
+    display: inline-flex;
+    align-content: center;
+    justify-content: center;
+
+    flex-direction: column;
+    flex-wrap: nowrap;
+}
+
+.linkbox > a {
+    /* flex */
+    display: flex;
+    align-content: center;
+    justify-content: center;
+
+    /* colors */
+    background-color: var(--color-bg);
+    color: var(--color-fg);
+    text-decoration: none;
+
+    /* spacing */
+    padding: 5px;
+    margin: 5px;
+
+    /* border */
+    border: solid;
+    border-color: var(--color-fg);
+    border-radius: 10px;
+    border-width: 2px;
+}
