@@ -8,7 +8,7 @@ function page(stub, href) {
 
 const PAGES = [
   page('home', '/index.html'),
-  page('games', '/games.html'),
+  page('demos', '/demos.html'),
   page('blog', '/blog.html'),
 ];
 
