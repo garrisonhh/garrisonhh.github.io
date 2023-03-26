@@ -14,6 +14,10 @@
     --link-color: var(--pal-pastelblue);
     --color-fg: #D7D7D7;
     --color-bg: #232323;
+
+    /* fonts */
+    --serious-font-fam: Cambria, Cochin, Georgia, Times, 'Times New Roman', serif;
+    --simple-font-fam: Impact, Haettenschweiler, 'Arial Narrow Bold', sans-serif;
 }
 
 body {
@@ -25,13 +29,31 @@ body {
     flex-direction: column;
 
     /* font stuff */
-    font-family: Impact, Haettenschweiler, 'Arial Narrow Bold', sans-serif;
+    font-family: var(--simple-font-fam);
     color: var(--color-fg);
     background-color: var(--color-bg);
 }
 
 a, a:visited {
     color: var(--link-color);
+    font-family: var(--simple-font-fam);
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    /* emphasis */
+    border-style: dotted;
+    border-width: 0px;
+    border-left-width: 3px;
+    border-color: var(--color-fg);
+    padding-left: 5px;
+
+    /* goofy font */
+    font-family: var(--serious-font-fam);
 }
 
 #header {
@@ -74,6 +96,7 @@ button.header-link {
 
     flex-direction: row;
 
+    /* fill space */
     width: 100%;
 }
 
