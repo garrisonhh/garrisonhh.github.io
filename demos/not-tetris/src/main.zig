@@ -11,12 +11,14 @@ pub const Event = union(enum) {
 
     const Key = enum {
         pause,
-        rotate_left,
-        rotate_right,
+        left,
+        right,
+        clockwise,
+        counterclockwise,
     };
 
     click: @Vector(2, usize),
-    keypress: Key,
+    keydown: Key,
 
     const DecodeError =
         Allocator.Error ||
@@ -54,12 +56,12 @@ pub const Event = union(enum) {
             const x = try getJsField(value, "x", .Integer);
             const y = try getJsField(value, "y", .Integer);
             return Self{ .click = .{ @intCast(usize, x), @intCast(usize, y) } };
-        } else if (std.mem.eql(u8, ty, "keypress")) {
+        } else if (std.mem.eql(u8, ty, "keydown")) {
             const keyname = try getJsField(value, "key", .String);
             const key = std.meta.stringToEnum(Key, keyname) orelse {
                 return DecodeError.MalformedEvents;
             };
-            return Self{ .keypress = key };
+            return Self{ .keydown = key };
         }
 
         return DecodeError.MalformedEvents;
@@ -110,12 +112,35 @@ const Response = union(enum) {
                 .{@errorName(err)},
             ),
             .success => print(
-                "{{\"type\": \"success\", \"tetris\": \"{s}\"}}",
-                .{@as([]const u8, &tetris.serialize())},
+                \\{{
+                \\  "type": "success",
+                \\  "paused": {},
+                \\  "tetris": "{s}"
+                \\}}
+            ,
+                .{
+                    tetris.paused,
+                    @as([]const u8, &tetris.serialize()),
+                },
             ),
         };
     }
 };
+
+// runtime =====================================================================
+
+fn dispatchEvent(ev: Event) !void {
+    switch (ev) {
+        .keydown => |key| switch (key) {
+            .pause => tetris.togglePause(),
+            .left => tetris.move(.left),
+            .right => tetris.move(.right),
+            .clockwise => tetris.rotate(.clockwise),
+            .counterclockwise => tetris.rotate(.counterclockwise),
+        },
+        .click => {},
+    }
+}
 
 // exported ====================================================================
 
@@ -145,13 +170,23 @@ export fn init(rng_seed: u64) void {
 export fn update(delta_ms: usize, events_json: [*:0]const u8) [*:0]const u8 {
     const ally = std.heap.page_allocator;
 
-    _ = delta_ms;
-
+    // decode events
     const json_len = std.mem.len(events_json);
     const events = Event.decodeArray(ally, events_json[0..json_len]) catch |e| {
         return (Response{ .err = e }).into();
     };
     defer ally.free(events);
+
+    // apply events
+    for (events) |event| {
+        dispatchEvent(event) catch |e| {
+            return (Response{ .err = e }).into();
+        };
+    }
+
+    // update tetris
+    // tetris.update(delta_ms);
+    _ = delta_ms;
 
     return (Response{ .success = {} }).into();
 }

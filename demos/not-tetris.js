@@ -80,11 +80,12 @@ function readJSON(cart, addr) {
 const eventQueue = [];
 
 let canvas = undefined;
+let ctx = undefined;
 
 // drawing consts
 const CELL_SIZE = 20;
 
-const COLORS = {
+const COLORS = new Map(Object.entries({
   ' ': 'rgb(25, 25, 25)',
   'I': 'rgb(0, 240, 240)',
   'J': 'rgb(0, 0, 240)',
@@ -93,22 +94,56 @@ const COLORS = {
   'S': 'rgb(138, 234, 40)',
   'T': 'rgb(136, 44, 237)',
   'Z': 'rgb(207, 54, 22)',
-};
+}));
+
+const CONTROLS = new Map(Object.entries({
+  "Escape": "pause",
+  "ArrowLeft": "left",
+  "ArrowRight": "right",
+  "ArrowUp": "clockwise",
+  "z": "counterclockwise",
+  "x": "clockwise",
+}));
+
+// draw a cell at a canvas position
+function drawCell(mino, x, y) {
+  ctx.fillStyle = COLORS.get(mino);
+  ctx.fillRect(x, y, CELL_SIZE, CELL_SIZE);
+}
 
 // takes serialized tetris board and draws it to the canvas
-function draw(serialized) {
-  const ctx = canvas.getContext('2d');
-  ctx.fillStyle = '#000';
-  ctx.clearRect(0, 0, ctx.width, ctx.height);
+function draw(paused, serialized) {
+  // clear canvas with an obnoxious pink
+  ctx.fillStyle = '#F0A';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+  // draw board
   for (let y = 0; y < 20; y++) {
     for (let x = 0; x < 10; x++) {
-      ctx.fillStyle = COLORS[serialized[y * 10 + x]];
-
       const rx = x * CELL_SIZE;
       const ry = y * CELL_SIZE;
-      ctx.fillRect(rx, ry, CELL_SIZE, CELL_SIZE);
+      drawCell(serialized[y * 10 + x], rx, ry);
     }
+  }
+
+  // draw next shapes (TODO)
+
+  // pause overlay
+  if (paused) {
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // draw pause text in the center of the screen
+    const pauseText = 'paused';
+    const measure = ctx.measureText(pauseText);
+
+    const pauseW = measure.width;
+    const pauseH = measure.actualBoundingBoxAscent;
+    const pauseX = (canvas.width - pauseW) / 2;
+    const pauseY = (canvas.height - pauseH) / 2;
+
+    ctx.fillStyle = 'white';
+    ctx.fillText(pauseText, pauseX, pauseY);
   }
 }
 
@@ -117,9 +152,13 @@ addEventListener('load', () => {
   canvas.width = 10 * CELL_SIZE;
   canvas.height = 20 * CELL_SIZE;
 
+  ctx = canvas.getContext('2d');
+  ctx.font = '20px sans-serif';
+
   const canvasX = canvas.offsetLeft + canvas.clientLeft;
   const canvasY = canvas.offsetTop + canvas.clientTop;
 
+  // controls
   canvas.addEventListener('click', (ev) => {
     // only active on left click
     if (ev.button != 0) return;
@@ -129,6 +168,17 @@ addEventListener('load', () => {
       x: ev.pageX - canvasX,
       y: ev.pageY - canvasY,
     };
+    console.log("click:", event);
+
+    eventQueue.push(event);
+  }, false);
+
+  addEventListener('keydown', (ev) => {
+    const key = CONTROLS.get(ev.key);
+    if (key === undefined) return;
+
+    const event = { type: "keydown", key };
+    console.log("keydown:", event);
 
     eventQueue.push(event);
   }, false);
@@ -149,13 +199,19 @@ function update(cart, delta_ms) {
   const obj = readJSON(cart, strAddr);
   freeString(cart, input);
 
+  // show json in debug info (TODO remove)
+  const debugging = document.querySelector('#debugging');
+  debugging.innerText = JSON.stringify(obj, undefined, 2);
+
+  // act on response
   switch (obj.type) {
     case "error":
       const err = new Error(obj.message);
       err.name = "error in cart";
       throw err;
     case "success":
-      draw(obj.tetris);
+      let { paused, tetris } = obj;
+      draw(paused, tetris);
       break;
   }
 }

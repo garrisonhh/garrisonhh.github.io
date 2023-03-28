@@ -38,6 +38,10 @@ canvas {
     background-color: #000;
 }
 
+pre {
+    font-size: 12px;
+}
+
 a, a:visited {
     color: var(--link-color);
     font-family: var(--simple-font-fam);
