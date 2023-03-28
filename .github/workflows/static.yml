@@ -34,10 +34,11 @@ jobs:
         with:
           version: 0.10.1
       - name: compile not-tetris
-        run: cd games/not-tetris
-        run: zig build
-        run: mv ./zig-out/lib/not-tetris.wasm .
-        run: cd -
+        run: |
+          cd demos/not-tetris
+          zig build
+          mv ./zig-out/lib/not-tetris.wasm .
+          cd -
       - name: set up pages
         uses: actions/configure-pages@v3
       - name: upload artifact
