@@ -15,6 +15,7 @@ pub const Event = union(enum) {
         right,
         clockwise,
         counterclockwise,
+        hard_drop,
     };
 
     click: @Vector(2, usize),
@@ -114,13 +115,15 @@ const Response = union(enum) {
             .success => print(
                 \\{{
                 \\  "type": "success",
-                \\  "paused": {},
-                \\  "tetris": "{s}"
+                \\  "paused": {[paused]},
+                \\  "time": {[time]d},
+                \\  "tetris": "{[board]s}"
                 \\}}
             ,
                 .{
-                    tetris.paused,
-                    @as([]const u8, &tetris.serialize()),
+                    .paused = tetris.paused,
+                    .time = tetris.time,
+                    .board = @as([]const u8, &tetris.serialize()),
                 },
             ),
         };
@@ -133,10 +136,11 @@ fn dispatchEvent(ev: Event) !void {
     switch (ev) {
         .keydown => |key| switch (key) {
             .pause => tetris.togglePause(),
-            .left => tetris.move(.left),
-            .right => tetris.move(.right),
-            .clockwise => tetris.rotate(.clockwise),
-            .counterclockwise => tetris.rotate(.counterclockwise),
+            .left => _ = tetris.move(.left),
+            .right => _ = tetris.move(.right),
+            .clockwise => _ = tetris.rotate(.clockwise),
+            .counterclockwise => _ = tetris.rotate(.counterclockwise),
+            .hard_drop => tetris.hardDrop(),
         },
         .click => {},
     }
@@ -185,8 +189,7 @@ export fn update(delta_ms: usize, events_json: [*:0]const u8) [*:0]const u8 {
     }
 
     // update tetris
-    // tetris.update(delta_ms);
-    _ = delta_ms;
+    tetris.update(delta_ms);
 
     return (Response{ .success = {} }).into();
 }

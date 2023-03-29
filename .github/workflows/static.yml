@@ -1,4 +1,4 @@
-name: build wasm module and deploy static pages
+name: build and deploy
 
 on:
   # which branch to deploy from

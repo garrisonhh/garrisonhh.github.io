@@ -65,9 +65,9 @@ function dupeString(cart, str) {
 // free a wasm c string
 function freeString(cart, addr) {
   const str = readString(cart, addr);
-  const array = new TextEncoder().encode(str);
+  const len = new TextEncoder().encode(str).length + 1;
 
-  cart.exports.free(addr, array.len + 1);
+  cart.exports.free(addr, len);
 }
 
 // loads json from wasm c string
@@ -103,6 +103,7 @@ const CONTROLS = new Map(Object.entries({
   "ArrowUp": "clockwise",
   "z": "counterclockwise",
   "x": "clockwise",
+  " ": "hard_drop",
 }));
 
 // draw a cell at a canvas position
@@ -221,11 +222,13 @@ function startGame(cart) {
 
   let prevTs = undefined;
   const loop = (ts) => {
+    ts = Math.floor(ts);
+
     if (prevTs === undefined) {
       prevTs = ts;
     }
 
-    const delta_ms = prevTs - ts;
+    const delta_ms = ts - prevTs;
     update(cart, delta_ms);
 
     prevTs = ts;

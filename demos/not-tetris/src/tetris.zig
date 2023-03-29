@@ -5,10 +5,12 @@ const Allocator = std.mem.Allocator;
 
 const Self = @This();
 
+pub const Success = enum { success, failure };
+
 pub const Pos = @Vector(2, i8);
 pub const Rotation = u2;
 pub const RotationDir = enum { clockwise, counterclockwise };
-pub const MoveDir = enum { left, right };
+pub const MoveDir = enum { left, right, down };
 
 pub const Tetromino = enum {
     const STARTING_OFFSET: Pos = .{3, -2};
@@ -171,7 +173,6 @@ pub fn init(seed: u64) Self {
         }
     }
 
-    self.ensureBag();
     self.newMino();
 
     return self;
@@ -181,21 +182,26 @@ pub fn togglePause(self: *Self) void {
     self.paused = !self.paused;
 }
 
-pub fn move(self: *Self, dir: MoveDir) void {
-    if (self.paused) return;
+pub fn move(self: *Self, dir: MoveDir) Success {
+    if (self.paused) return .failure;
 
-    const offset = self.offset + switch (dir) {
-        .right => Pos{1, 0},
-        .left => Pos{-1, 0},
-    };
+    const offset = self.offset + @as(Pos, switch (dir) {
+        .right => .{1, 0},
+        .left => .{-1, 0},
+        .down => .{0, 1},
+    });
 
     if (!self.collides(self.mino.at(self.rotation, offset))) {
         self.offset = offset;
+
+        return .success;
     }
+
+    return .failure;
 }
 
-pub fn rotate(self: *Self, dir: RotationDir) void {
-    if (self.paused) return;
+pub fn rotate(self: *Self, dir: RotationDir) Success {
+    if (self.paused) return .failure;
 
     const rotation = switch (dir) {
         .clockwise => self.rotation +% 1,
@@ -204,6 +210,18 @@ pub fn rotate(self: *Self, dir: RotationDir) void {
 
     if (!self.collides(self.mino.at(rotation, self.offset))) {
         self.rotation = rotation;
+
+        return .success;
+    }
+
+    return .failure;
+}
+
+pub fn hardDrop(self: *Self) void {
+    while (self.move(.down) == .success) {}
+
+    if (self.lockRefreshMino() == .failure) {
+        // TODO game over!
     }
 }
 
@@ -253,26 +271,78 @@ fn ensureBag(self: *Self) void {
     }
 }
 
+/// pop a mino
 fn newMino(self: *Self) void {
+    self.ensureBag();
+
     self.offset = Tetromino.STARTING_OFFSET;
     self.mino = self.bag.pop();
     self.rotation = 0;
 
-    self.moveDown();
+    if (self.move(.down) == .failure) {
+        // TODO game over
+    }
 }
 
-fn moveDown(self: *Self) void {
-    self.offset[1] += 1;
+fn clearLines(self: *Self) void {
+    // collect clear lines (in descending order)
+    var lines = std.BoundedArray(usize, HEIGHT){};
+    for (self.board) |row, y| {
+        for (row) |cell| {
+            if (cell.fill == null) break;
+        } else {
+            lines.appendAssumeCapacity(y);
+        }
+    }
+
+    // remove each line
+    for (lines.slice()) |y| {
+        var i: usize = y;
+        while (i > 0) : (i -= 1) {
+            self.board[i] = self.board[i - 1];
+        }
+
+        std.mem.set(Cell, &self.board[0], Cell{ .fill = null });
+    }
 }
 
-fn tick(self: *Self) void {
-    _ = self;
+/// lock mino, check for line clears, and pop a new mino
+/// if this fails, game over!
+fn lockRefreshMino(self: *Self) Success {
+    for (self.mino.at(self.rotation, self.offset)) |pos| {
+        if (!inbounds(pos)) continue;
+
+        const x = @intCast(usize, pos[0]);
+        const y = @intCast(usize, pos[1]);
+        self.board[y][x].fill = self.mino;
+    }
+
+    self.clearLines();
+    self.newMino();
+
+    return .success;
+}
+
+/// drop mino one level
+fn dropMino(self: *Self) Success {
+    return switch (self.move(.down)) {
+        .success => .success,
+        .failure => self.lockRefreshMino(),
+    };
 }
 
 pub fn update(self: *Self, delta_ms: usize) void {
-    if (!self.paused) {
-        self.time += delta_ms;
-        self.ticker += delta_ms;
+    if (self.paused) return;
+
+    // TODO replace with some kind of level table
+    const TICK_DELAY = 250;
+
+    self.time += delta_ms;
+    self.ticker += delta_ms;
+
+    if (self.ticker >= TICK_DELAY) {
+        self.ticker -= TICK_DELAY;
+        _ = self.dropMino();
     }
 }
 
