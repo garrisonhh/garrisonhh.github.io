@@ -31,7 +31,7 @@ html {
 
 body {
     /* sizing */
-    --body-width: calc(max(100vw - 480px, 320px));
+    --body-width: calc(min(max(100vw - 320px, 320px), 720px));
     --body-left: calc((100vw - var(--body-width)) / 2);
 
     position: relative;
