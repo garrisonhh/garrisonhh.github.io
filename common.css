@@ -20,7 +20,9 @@
 
     /* fonts */
     --serious-font-fam: Cambria, Cochin, Georgia, Times, 'Times New Roman', serif;
-    --simple-font-fam: Impact, Haettenschweiler, 'Arial Narrow Bold', sans-serif;
+    --simple-font-fam: arial, sans-serif;
+    font-size: 1rem;
+
 }
 
 html {
@@ -29,7 +31,7 @@ html {
 
 body {
     /* sizing */
-    --body-width: calc(max(100vw - 480px, 480px));
+    --body-width: calc(max(100vw - 480px, 320px));
     --body-left: calc((100vw - var(--body-width)) / 2);
 
     position: relative;
@@ -51,10 +53,6 @@ body {
 
 canvas {
     background-color: #000;
-}
-
-pre {
-    font-size: 12px;
 }
 
 a, a:visited {
