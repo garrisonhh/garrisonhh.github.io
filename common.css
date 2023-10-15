@@ -11,16 +11,31 @@
     --pal-khaki: #fef3c0;
 
     /* targeted colors */
-    --link-color: var(--pal-pastelblue);
-    --color-fg: #D7D7D7;
-    --color-bg: #232323;
+    --color-link: var(--pal-rosa);
+    --color-emphasis: var(--pal-pastelblue);
+    --color-titles: var(--pal-green);
+    --color-highlight: var(--pal-bluegreen);
+    --color-fg: #D7D7F7;
+    --color-bg: #232333;
 
     /* fonts */
     --serious-font-fam: Cambria, Cochin, Georgia, Times, 'Times New Roman', serif;
     --simple-font-fam: Impact, Haettenschweiler, 'Arial Narrow Bold', sans-serif;
 }
 
+html {
+    size: 100%;
+}
+
 body {
+    /* sizing */
+    --body-width: calc(max(100vw - 480px, 480px));
+    --body-left: calc((100vw - var(--body-width)) / 2);
+
+    position: relative;
+    left: var(--body-left);
+    width: var(--body-width);
+
     /* flex */
     display: flex;
     align-items: center;
@@ -43,7 +58,7 @@ pre {
 }
 
 a, a:visited {
-    color: var(--link-color);
+    color: var(--color-link);
     font-family: var(--simple-font-fam);
 }
 
@@ -61,8 +76,14 @@ h6 {
     padding-bottom: 5px;
     padding-left: 5px;
 
-    /* goofy font */
+    /* font */
+    color: var(--color-titles);
     font-family: var(--serious-font-fam);
+}
+
+ul {
+    padding-top: 10px;
+    padding-bottom: 10px;
 }
 
 #header {
@@ -89,7 +110,7 @@ button.header-link {
 
     /* border */
     border: solid;
-    border-color: var(--color-fg);
+    border-color: var(--color-link);
     border-radius: 10px;
     border-width: 2px;
 
@@ -136,7 +157,7 @@ button.header-link {
 
     /* border */
     border: solid;
-    border-color: var(--color-fg);
+    border-color: var(--color-link);
     border-radius: 10px;
     border-width: 2px;
 }

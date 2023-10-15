@@ -1,0 +1,5 @@
+@import url("/common.css");
+
+#skills span {
+    color: var(--color-emphasis);
+}
