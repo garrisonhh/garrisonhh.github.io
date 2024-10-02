@@ -105,7 +105,6 @@ function loadShader(gl, vertSource, fragSource) {
 
 /**
  * @typedef {Object} BackgroundContext
- * @property {HTMLCanvasElement} canvas
  * @property {WebGL2RenderingContext} gl
  * @property {BackgroundShader} shader
  *
@@ -123,7 +122,7 @@ function backgroundLoop(ctx, ts) {
 
     gl.uniform1f(ctx.shader.uniforms.timestamp, ts);
     gl.uniform2f(ctx.shader.uniforms.resolution, gl.canvas.width, gl.canvas.height);
-    gl.drawArrays(gl.TRIANGLES, 0, 6);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
     gl.disableVertexAttribArray(ctx.shader.attributes.aTexCoord);
 
@@ -134,8 +133,18 @@ function backgroundLoop(ctx, ts) {
  * @param {HTMLCanvasElement} canvas
  * @param {string} imageSource
  */
-export async function initBackground(canvas, imageSource) {
+export async function initBackground(canvas) {
     const gl = canvas.getContext('webgl2');
+
+    const ensureSize = () => {
+        const [w, h] = [window.innerWidth, window.innerHeight];
+        gl.canvas.width = w;
+        gl.canvas.height = h;
+        gl.viewport(0, 0, w, h);
+    };
+
+    ensureSize();
+    window.addEventListener('resize', ensureSize);
 
     const fragSource = await loadTextFromUrl('./resources/bg.frag');
     const vertSource = await loadTextFromUrl('./resources/bg.vert');
@@ -147,8 +156,6 @@ export async function initBackground(canvas, imageSource) {
 
     const texcoords = [
         0.0, 0.0,
-        0.0, 1.0,
-        1.0, 0.0,
         0.0, 1.0,
         1.0, 0.0,
         1.0, 1.0,
@@ -166,6 +173,6 @@ export async function initBackground(canvas, imageSource) {
 
     gl.bindBuffer(gl.ARRAY_BUFFER, null);
 
-    const bgContext = { canvas, gl, shader };
+    const bgContext = { gl, shader };
     requestAnimationFrame(bgContext, backgroundLoop);
 }
