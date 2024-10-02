@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>potion</title>
+  </head>
+  <body>
+    <main>
+      <canvas id="background-canvas">loading...</canvas>
+    </main>
+  </body>
+
+  <style>
+    canvas {
+      position: absolute;
+      top: 0px;
+      left: 0px;
+      width: 100vw;
+      height: 100vh;
+      margin: 0;
+    }
+  </style>
+
+  <script type="module">
+    import { initBackground } from './modules/potion.js';
+
+    addEventListener('load', () => {
+      const canvas = document.getElementById('background-canvas');
+      console.assert(canvas != null);
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+
+      initBackground(canvas);
+    });
+  </script>
+</html>
