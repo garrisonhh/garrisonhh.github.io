@@ -140,10 +140,6 @@ function backgroundLoop(ctx, ts) {
 export async function initBackground(canvas, imageSource) {
     const gl = canvas.getContext('webgl2');
 
-    canvas.addEventListener('resize', () => {
-        gl.viewport(0, 0, canvas.width, canvas.height);
-    });
-
     const fragSource = await loadTextFromUrl('/resources/bg.frag');
     const vertSource = await loadTextFromUrl('/resources/bg.vert');
     const shader = loadShader(gl, vertSource, fragSource);
