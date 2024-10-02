@@ -23,13 +23,13 @@ pub const Event = union(enum) {
 
     const DecodeError =
         Allocator.Error ||
-        std.json.TokenStream.Error ||
+        std.json.ParseError(std.json.Scanner) ||
         error{ InvalidLiteral, InvalidCharacter, MalformedEvents };
 
     fn getJsValue(
         value: std.json.Value,
         comptime tag: std.meta.Tag(std.json.Value),
-    ) DecodeError!std.meta.fieldInfo(std.json.Value, tag).field_type {
+    ) DecodeError!std.meta.FieldType(std.json.Value, tag) {
         switch (value) {
             inline else => |data, active| {
                 return if (active != tag) DecodeError.MalformedEvents else data;
@@ -41,8 +41,8 @@ pub const Event = union(enum) {
         value: std.json.Value,
         key: []const u8,
         comptime tag: std.meta.Tag(std.json.Value),
-    ) DecodeError!std.meta.fieldInfo(std.json.Value, tag).field_type {
-        const map = try getJsValue(value, .Object);
+    ) DecodeError!std.meta.FieldType(std.json.Value, tag) {
+        const map = try getJsValue(value, .object);
         const val = map.get(key) orelse {
             return DecodeError.MalformedEvents;
         };
@@ -51,14 +51,14 @@ pub const Event = union(enum) {
     }
 
     fn decodeJsValue(value: std.json.Value) DecodeError!Self {
-        const ty = try getJsField(value, "type", .String);
+        const ty = try getJsField(value, "type", .string);
 
         if (std.mem.eql(u8, ty, "click")) {
-            const x = try getJsField(value, "x", .Integer);
-            const y = try getJsField(value, "y", .Integer);
-            return Self{ .click = .{ @intCast(usize, x), @intCast(usize, y) } };
+            const x = try getJsField(value, "x", .integer);
+            const y = try getJsField(value, "y", .integer);
+            return Self{ .click = .{ @intCast(x), @intCast(y) } };
         } else if (std.mem.eql(u8, ty, "keydown")) {
-            const keyname = try getJsField(value, "key", .String);
+            const keyname = try getJsField(value, "key", .string);
             const key = std.meta.stringToEnum(Key, keyname) orelse {
                 return DecodeError.MalformedEvents;
             };
@@ -69,15 +69,15 @@ pub const Event = union(enum) {
     }
 
     fn decodeArray(ally: Allocator, json: []const u8) DecodeError![]Self {
-        var parser = std.json.Parser.init(ally, false);
-        defer parser.deinit();
+        var scanner = std.json.Scanner.initCompleteInput(ally, json);
+        defer scanner.deinit();
 
-        const tree = try parser.parse(json);
+        const tree = try std.json.Value.jsonParse(ally, &scanner, .{});
 
         // decode each object
-        const values = (try getJsValue(tree.root, .Array)).items;
+        const values = (try getJsValue(tree, .array)).items;
         const events = try ally.alloc(Self, values.len);
-        for (values) |value, i| {
+        for (values, 0..) |value, i| {
             events[i] = try decodeJsValue(value);
         }
 

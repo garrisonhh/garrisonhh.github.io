@@ -7,7 +7,7 @@ async function initWASM() {
     shared: true,
   });
 
-  const path = "not-tetris/not-tetris.wasm";
+  const path = "/bin/tetris.wasm";
   const src = await WebAssembly.instantiateStreaming(fetch(path), {
     js: { mem: memory },
   });

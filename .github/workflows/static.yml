@@ -20,11 +20,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Single deploy job since we're just deploying
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+  build:
     runs-on: ubuntu-latest
     steps:
       - name: checkout
@@ -32,20 +28,24 @@ jobs:
       - name: set up zig
         uses: goto-bus-stop/setup-zig@v2
         with:
-          version: 0.10.1
-      - name: compile not-tetris
+          version: 0.13.0
+      - name: compile everything
         run: |
-          cd demos/not-tetris
           zig build
-          mv ./zig-out/lib/not-tetris.wasm .
-          cd -
       - name: set up pages
         uses: actions/configure-pages@v3
       - name: upload artifact
-        uses: actions/upload-pages-artifact@v1
+        uses: actions/upload-pages-artifact@v3
         with:
-          # Upload entire repository
-          path: '.'
+          path: './zig-out/'
+
+  deploy:
+    needs: build
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
       - name: deploy website
         id: deployment
-        uses: actions/deploy-pages@v1
+        uses: actions/deploy-pages@v4

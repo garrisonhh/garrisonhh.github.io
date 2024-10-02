@@ -13,7 +13,7 @@ pub const RotationDir = enum { clockwise, counterclockwise };
 pub const MoveDir = enum { left, right, down };
 
 pub const Tetromino = enum {
-    const STARTING_OFFSET: Pos = .{3, -2};
+    const STARTING_OFFSET: Pos = .{ 3, -2 };
 
     I,
     J,
@@ -37,9 +37,9 @@ pub const Tetromino = enum {
             var lines = std.mem.split(u8, str, "\n");
             var y: i8 = 0;
             while (lines.next()) |line| : (y += 1) {
-                for (line) |ch, x| {
+                for (line, 0..) |ch, x| {
                     if (ch != ' ') {
-                        shape[index] = Pos{@intCast(i8, x), y};
+                        shape[index] = Pos{ @intCast(x), y };
                         index += 1;
                     }
                 }
@@ -52,38 +52,42 @@ pub const Tetromino = enum {
     fn getShape(self: @This()) Shape {
         switch (self) {
             inline else => |mino| {
-                const form: []const u8 = switch (mino) {
-                    .I =>
-                    \\
-                    \\####
-                    ,
-                    .J =>
-                    \\#
-                    \\###
-                    ,
-                    .L =>
-                    \\  #
-                    \\###
-                    ,
-                    .O =>
-                    \\ ##
-                    \\ ##
-                    ,
-                    .S =>
-                    \\ ##
-                    \\##
-                    ,
-                    .T =>
-                    \\ #
-                    \\###
-                    ,
-                    .Z =>
-                    \\##
-                    \\ ##
-                    ,
+                const shape = comptime shape: {
+                    const form: []const u8 = switch (mino) {
+                        .I =>
+                        \\
+                        \\####
+                        ,
+                        .J =>
+                        \\#
+                        \\###
+                        ,
+                        .L =>
+                        \\  #
+                        \\###
+                        ,
+                        .O =>
+                        \\ ##
+                        \\ ##
+                        ,
+                        .S =>
+                        \\ ##
+                        \\##
+                        ,
+                        .T =>
+                        \\ #
+                        \\###
+                        ,
+                        .Z =>
+                        \\##
+                        \\ ##
+                        ,
+                    };
+
+                    break :shape compileShape(form);
                 };
 
-                return compileShape(form);
+                return shape;
             },
         }
     }
@@ -91,9 +95,9 @@ pub const Tetromino = enum {
     /// rotation center
     fn getCenter(self: @This()) @Vector(2, f32) {
         return switch (self) {
-            .I => .{1.5, 1.5},
-            .O => .{1.5, 0.5},
-            else => .{1.0, 1.0},
+            .I => .{ 1.5, 1.5 },
+            .O => .{ 1.5, 0.5 },
+            else => .{ 1.0, 1.0 },
         };
     }
 
@@ -106,19 +110,19 @@ pub const Tetromino = enum {
         var i: Rotation = 0;
         while (i < rotation) : (i += 1) {
             // rotate clockwise once
-            for (shape) |*pos| {
-                const rel_x = @intToFloat(f32, pos.*[0]) - center[0];
-                const rel_y = @intToFloat(f32, pos.*[1]) - center[1];
+            for (&shape) |*pos| {
+                const rel_x = @as(f32, @floatFromInt(pos.*[0])) - center[0];
+                const rel_y = @as(f32, @floatFromInt(pos.*[1])) - center[1];
                 const next_x = -rel_y + center[0];
                 const next_y = rel_x + center[1];
 
-                pos.*[0] = @floatToInt(i8, next_x);
-                pos.*[1] = @floatToInt(i8, next_y);
+                pos.*[0] = @intFromFloat(next_x);
+                pos.*[1] = @intFromFloat(next_y);
             }
         }
 
         // move to offset
-        for (shape) |*pos| {
+        for (&shape) |*pos| {
             pos.* += offset;
         }
 
@@ -160,14 +164,14 @@ pub fn init(seed: u64) Self {
         .paused = true,
         .time = 0,
         .ticker = 0,
-        .offset = .{0, 0},
+        .offset = .{ 0, 0 },
         .mino = undefined,
         .rotation = 0,
         .board = undefined,
         .bag = .{},
     };
 
-    for (self.board) |*row| {
+    for (&self.board) |*row| {
         for (row) |*cell| {
             cell.* = .{ .fill = null };
         }
@@ -186,9 +190,9 @@ pub fn move(self: *Self, dir: MoveDir) Success {
     if (self.paused) return .failure;
 
     const offset = self.offset + @as(Pos, switch (dir) {
-        .right => .{1, 0},
-        .left => .{-1, 0},
-        .down => .{0, 1},
+        .right => .{ 1, 0 },
+        .left => .{ -1, 0 },
+        .down => .{ 0, 1 },
     });
 
     if (!self.collides(self.mino.at(self.rotation, offset))) {
@@ -227,13 +231,13 @@ pub fn hardDrop(self: *Self) void {
 
 fn inbounds(pos: Pos) bool {
     return pos[1] >= 0 and pos[1] < HEIGHT and
-           pos[0] >= 0 and pos[0] < WIDTH;
+        pos[0] >= 0 and pos[0] < WIDTH;
 }
 
 fn getPos(self: *const Self, pos: Pos) ?*const Cell {
     if (inbounds(pos)) {
-        const x = @intCast(usize, pos[0]);
-        const y = @intCast(usize, pos[1]);
+        const x: usize = @intCast(pos[0]);
+        const y: usize = @intCast(pos[1]);
         return &self.board[y][x];
     }
 
@@ -262,8 +266,8 @@ fn ensureBag(self: *Self) void {
     if (self.bag.len < 7) {
         // shake and add a new bag
         var minos: [7]Tetromino = undefined;
-        for (minos) |*mino, i| {
-            mino.* = @intToEnum(Tetromino, i);
+        for (&minos, 0..) |*mino, i| {
+            mino.* = @enumFromInt(i);
         }
 
         self.rng.random().shuffle(Tetromino, &minos);
@@ -287,7 +291,7 @@ fn newMino(self: *Self) void {
 fn clearLines(self: *Self) void {
     // collect clear lines (in descending order)
     var lines = std.BoundedArray(usize, HEIGHT){};
-    for (self.board) |row, y| {
+    for (self.board, 0..) |row, y| {
         for (row) |cell| {
             if (cell.fill == null) break;
         } else {
@@ -302,7 +306,7 @@ fn clearLines(self: *Self) void {
             self.board[i] = self.board[i - 1];
         }
 
-        std.mem.set(Cell, &self.board[0], Cell{ .fill = null });
+        @memset(@as(*[HEIGHT * WIDTH]Cell, @ptrCast(&self.board)), Cell{ .fill = null });
     }
 }
 
@@ -312,8 +316,8 @@ fn lockRefreshMino(self: *Self) Success {
     for (self.mino.at(self.rotation, self.offset)) |pos| {
         if (!inbounds(pos)) continue;
 
-        const x = @intCast(usize, pos[0]);
-        const y = @intCast(usize, pos[1]);
+        const x: usize = @intCast(pos[0]);
+        const y: usize = @intCast(pos[1]);
         self.board[y][x].fill = self.mino;
     }
 
@@ -353,8 +357,8 @@ pub fn serialize(self: *const Self) [SERIAL_LEN]u8 {
     var buf: [HEIGHT][WIDTH]u8 = undefined;
 
     // draw board
-    for (self.board) |row, y| {
-        for (row) |cell, x| {
+    for (self.board, 0..) |row, y| {
+        for (row, 0..) |cell, x| {
             const char = if (cell.fill) |ty| ty.asCharacter() else ' ';
             buf[y][x] = char;
         }
@@ -364,11 +368,11 @@ pub fn serialize(self: *const Self) [SERIAL_LEN]u8 {
     for (self.mino.at(self.rotation, self.offset)) |pos| {
         // if inbounds, write cell
         if (inbounds(pos)) {
-            const x = @intCast(usize, pos[0]);
-            const y = @intCast(usize, pos[1]);
+            const x: usize = @intCast(pos[0]);
+            const y: usize = @intCast(pos[1]);
             buf[y][x] = self.mino.asCharacter();
         }
     }
 
-    return @bitCast([SERIAL_LEN]u8, buf);
+    return @bitCast(buf);
 }

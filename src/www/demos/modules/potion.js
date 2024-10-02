@@ -159,7 +159,7 @@ export async function initBackground(canvas) {
         0.0, 1.0,
         1.0, 0.0,
         1.0, 1.0,
-    ]
+    ];
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(texcoords), gl.STATIC_DRAW);
 
     gl.vertexAttribPointer(
