@@ -1,0 +1,100 @@
+<!doctype html>
+<html>
+  <head>
+    <title>WASM Demo</title>
+  </head>
+  <body>
+    <h3>WASM Demo</h3>
+
+    <div style="display: flex; flex-direction: column">
+      <div style="display: flex; flex-direction: row">
+        <label>a:</label>
+        <input id="input-a" type="number" value="0">
+      </div>
+      <div style="display: flex; flex-direction: row">
+        <label>b:</label>
+        <input id="input-b" type="number" value="0">
+      </div>
+      <div style="display: flex; flex-direction: row">
+        <label>out: </label>
+        <span id="result">...</span>
+      </div>
+    </div>
+  </body>
+
+  <script>
+    /** @type {WebAssembly.Module} */
+    let module = undefined;
+    /** @type {WebAssembly.Exports} */
+    let lib = undefined;
+
+    /**
+     * @param {number} ptr
+     * @param {number} len
+     */
+    const getStr = (ptr, len) => {
+      const memory = lib.memory;
+      const src = new Uint8Array(memory.buffer, ptr, len);
+
+      const buf = new ArrayBuffer(len);
+      const dst = new Uint8Array(buf);
+      dst.set(src);
+
+      const text = new TextDecoder().decode(dst);
+      return text;
+    };
+
+    /**
+     * @param {number} level
+     * @param {number} ptr
+     * @param {number} len
+     */
+    const logFn = (level, ptr, len) => {
+      switch (level) {
+        case 0:
+          console.error(getStr(ptr, len));
+          break;
+        case 1:
+          console.warn(getStr(ptr, len));
+          break;
+        case 2:
+          console.info(getStr(ptr, len));
+          break;
+        case 3:
+          console.debug(getStr(ptr, len));
+          break;
+      }
+    };
+
+    const wasmAdd = () => {
+      const a = document.querySelector('#input-a').value;
+      const b = document.querySelector('#input-b').value;
+
+      const res = lib.add(parseFloat(a), parseFloat(b));
+      document.querySelector('#result').textContent = `${res}`;
+    };
+
+    addEventListener('load', async () => {
+      memory = new WebAssembly.Memory({
+        initial: 20,
+        maximum: 100,
+        shared: true,
+      });
+
+      const src = await WebAssembly.instantiateStreaming(fetch('/lib/dotcom.wasm'), {
+        env: {
+          memory,
+          logFn,
+        },
+      });
+
+      module = src.module;
+      lib = src.instance.exports;
+
+      // reactive stuff
+      document.querySelector('#input-a').addEventListener('change', wasmAdd);
+      document.querySelector('#input-b').addEventListener('change', wasmAdd);
+    });
+
+  </script>
+</html>
