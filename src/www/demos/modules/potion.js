@@ -27,8 +27,6 @@ function backgroundLoop(ctx, ts) {
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
     gl.disableVertexAttribArray(ctx.shader.attributes.aTexCoord);
-
-    requestAnimationFrame(ctx, backgroundLoop);
 }
 
 /**

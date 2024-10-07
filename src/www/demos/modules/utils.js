@@ -46,6 +46,7 @@ export async function loadImageDataFromUrl(url) {
 export function requestAnimationFrame(context, callback) {
     const closure = (ts) => {
         callback(context, ts);
+        window.requestAnimationFrame(closure);
     };
     window.requestAnimationFrame(closure);
 }

@@ -2,20 +2,34 @@
 <html>
   <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="stylesheet" href="https://cdn.simplecss.org/simple.min.css">
-    <link rel="stylesheet" href="/common.css">
-    <script src="/common.js"></script>
-    <script src="tetris.js"></script>
 
     <title>tetris</title>
   </head>
   <body>
-    <div id="header">DUMMY HEADER</div>
     <main>
-      <canvas id="game">loading...</canvas>
+      <canvas id="background-canvas">loading...</canvas>
     </main>
-    <!-- TODO remove -->
-    <pre id="debugging"></pre>
-    <div id="footer">DUMMY FOOTER</div>
   </body>
+
+  <style>
+    canvas {
+      position: absolute;
+      top: 0px;
+      left: 0px;
+      width: 100vw;
+      height: 100vh;
+      margin: 0;
+    }
+  </style>
+
+  <script type="module">
+    import { initTetris } from './modules/tetris.js';
+
+    addEventListener('load', () => {
+      const canvas = document.getElementById('background-canvas');
+      console.assert(canvas != null);
+
+      initTetris(canvas);
+    });
+  </script>
 </html>
