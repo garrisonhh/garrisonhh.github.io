@@ -117,7 +117,7 @@ const Response = union(enum) {
                 \\  "type": "success",
                 \\  "paused": {[paused]},
                 \\  "time": {[time]d},
-                \\  "tetris": "{[board]s}"
+                \\  "board": "{[board]s}"
                 \\}}
             ,
                 .{
