@@ -99,6 +99,17 @@ export class Matrix {
         return new Matrix(this.columns, mappedData);
     }
 
+    /** @returns {Matrix} */
+    transpose() {
+        const t = new Matrix(this.rows, new Array(this.data.length));
+        for (let col = 0; col < this.columns; ++col) {
+            for (let row = 0; row < this.rows; ++row) {
+                t.set(col, row, this.get(row, col));
+            }
+        }
+        return t;
+    }
+
     /**
      * @param {number} value
      * @returns {Matrix}
@@ -136,13 +147,13 @@ export class Matrix {
      * @returns {Matrix}
      */
     mul(other) {
-        const prod = Matrix.zeroes(other.columns, this.rows);
-        console.assert(this.columns == other.rows);
+        const prod = Matrix.zeroes(this.columns, other.rows);
+        console.assert(other.columns == this.rows);
         for (let col = 0; col < prod.columns; ++col) {
             for (let row = 0; row < prod.rows; ++row) {
                 let value = 0;
-                for (let i = 0; i < this.columns; ++i) {
-                    value += this.get(row, i) * other.get(i, col);
+                for (let i = 0; i < other.columns; ++i) {
+                    value += other.get(row, i) * this.get(i, col);
                 }
 
                 prod.set(row, col, value);
@@ -183,7 +194,7 @@ export class Mat4 {
      * @returns {Matrix}
      */
     static chain(...matrices) {
-        return matrices.reduceRight((a, b) => a.mul(b), Mat4.identity())
+        return matrices.reduceRight((a, b) => b.mul(a), Mat4.identity())
     }
 
     /**
@@ -296,4 +307,48 @@ export class Mat4 {
             0, 0, 0, 1,
         ]);
     }
+
+    /**
+     * @param {Matrix} mat
+     * @returns {Matrix}
+     */
+    static invert(mat) {
+        // translated from raymath.h, so super ugly
+        const res = new Matrix(mat.columns, new Array(mat.data.length));
+
+        const b00 = mat.get(0, 0)*mat.get(1, 1) - mat.get(0, 1)*mat.get(1, 0);
+        const b01 = mat.get(0, 0)*mat.get(1, 2) - mat.get(0, 2)*mat.get(1, 0);
+        const b02 = mat.get(0, 0)*mat.get(1, 3) - mat.get(0, 3)*mat.get(1, 0);
+        const b03 = mat.get(0, 1)*mat.get(1, 2) - mat.get(0, 2)*mat.get(1, 1);
+        const b04 = mat.get(0, 1)*mat.get(1, 3) - mat.get(0, 3)*mat.get(1, 1);
+        const b05 = mat.get(0, 2)*mat.get(1, 3) - mat.get(0, 3)*mat.get(1, 2);
+        const b06 = mat.get(2, 0)*mat.get(3, 1) - mat.get(2, 1)*mat.get(3, 0);
+        const b07 = mat.get(2, 0)*mat.get(3, 2) - mat.get(2, 2)*mat.get(3, 0);
+        const b08 = mat.get(2, 0)*mat.get(3, 3) - mat.get(2, 3)*mat.get(3, 0);
+        const b09 = mat.get(2, 1)*mat.get(3, 2) - mat.get(2, 2)*mat.get(3, 1);
+        const b10 = mat.get(2, 1)*mat.get(3, 3) - mat.get(2, 3)*mat.get(3, 1);
+        const b11 = mat.get(2, 2)*mat.get(3, 3) - mat.get(2, 3)*mat.get(3, 2);
+
+        const invDet = 1.0 / (b00*b11 - b01*b10 + b02*b09 + b03*b08 - b04*b07 + b05*b06);
+
+        res.data[0] = (mat.get(1, 1)*b11 - mat.get(1, 2)*b10 + mat.get(1, 3)*b09)*invDet;
+        res.data[1] = (-mat.get(0, 1)*b11 + mat.get(0, 2)*b10 - mat.get(0, 3)*b09)*invDet;
+        res.data[2] = (mat.get(3, 1)*b05 - mat.get(3, 2)*b04 + mat.get(3, 3)*b03)*invDet;
+        res.data[3] = (-mat.get(2, 1)*b05 + mat.get(2, 2)*b04 - mat.get(2, 3)*b03)*invDet;
+        res.data[4] = (-mat.get(1, 0)*b11 + mat.get(1, 2)*b08 - mat.get(1, 3)*b07)*invDet;
+        res.data[5] = (mat.get(0, 0)*b11 - mat.get(0, 2)*b08 + mat.get(0, 3)*b07)*invDet;
+        res.data[6] = (-mat.get(3, 0)*b05 + mat.get(3, 2)*b02 - mat.get(3, 3)*b01)*invDet;
+        res.data[7] = (mat.get(2, 0)*b05 - mat.get(2, 2)*b02 + mat.get(2, 3)*b01)*invDet;
+        res.data[8] = (mat.get(1, 0)*b10 - mat.get(1, 1)*b08 + mat.get(1, 3)*b06)*invDet;
+        res.data[9] = (-mat.get(0, 0)*b10 + mat.get(0, 1)*b08 - mat.get(0, 3)*b06)*invDet;
+        res.data[10] = (mat.get(3, 0)*b04 - mat.get(3, 1)*b02 + mat.get(3, 3)*b00)*invDet;
+        res.data[11] = (-mat.get(2, 0)*b04 + mat.get(2, 1)*b02 - mat.get(2, 3)*b00)*invDet;
+        res.data[12] = (-mat.get(1, 0)*b09 + mat.get(1, 1)*b07 - mat.get(1, 2)*b06)*invDet;
+        res.data[13] = (mat.get(0, 0)*b09 - mat.get(0, 1)*b07 + mat.get(0, 2)*b06)*invDet;
+        res.data[14] = (-mat.get(3, 0)*b03 + mat.get(3, 1)*b01 - mat.get(3, 2)*b00)*invDet;
+        res.data[15] = (mat.get(2, 0)*b03 - mat.get(2, 1)*b01 + mat.get(2, 2)*b00)*invDet;
+
+        return res;
+    }
+
 }
