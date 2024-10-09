@@ -35,10 +35,10 @@ export class Matrix {
      * @returns {number}
      */
     get(row, col) {
-        if (this.row < 0 || this.row >= this.rows ||
-            this.col < 0 || this.col >= this.columns)
+        if (row < 0 || row >= this.rows ||
+            col < 0 || col >= this.columns)
         {
-            throw new Error("matrix coordinate out of bounds");
+            throw new Error(`matrix coordinate (${row}, ${col}) out of bounds (${this.rows}, ${this.columns})`);
         }
 
         return this.data[row * this.columns + col];
@@ -57,6 +57,19 @@ export class Matrix {
         }
 
         this.data[row * this.columns + col] = value;
+    }
+
+    /** @returns {string} */
+    text() {
+        let text = "";
+        for (let y = 0; y < this.rows; ++y) {
+            for (let x = 0; x < this.rows; ++x) {
+                if (x > 0) text += ", ";
+                text += `${this.get(y, x)}`;
+            }
+            text += "\n";
+        }
+        return text;
     }
 
     /**
@@ -95,6 +108,14 @@ export class Matrix {
     }
 
     /**
+     * @param {number} value
+     * @returns {Matrix}
+     */
+    divScalar(value) {
+        return this.map((x) => x / value);
+    }
+
+    /**
      * @param {Matrix} other
      * @returns {Matrix}
      */
@@ -115,15 +136,16 @@ export class Matrix {
      * @returns {Matrix}
      */
     mul(other) {
-        const prod = Matrix.zeroes(this.columns, other.rows);
-        for (let y = 0; y < prod.columns; ++y) {
-            for (let x = 0; x < prod.rows; ++x) {
+        const prod = Matrix.zeroes(other.columns, this.rows);
+        console.assert(this.columns == other.rows);
+        for (let col = 0; col < prod.columns; ++col) {
+            for (let row = 0; row < prod.rows; ++row) {
                 let value = 0;
-                for (let j = 0; j < this.rows; ++j) {
-                    value += this.get(j, x) * other.get(y, j);
+                for (let i = 0; i < this.columns; ++i) {
+                    value += this.get(row, i) * other.get(i, col);
                 }
 
-                prod.set(x, y, value);
+                prod.set(row, col, value);
             }
         }
 
@@ -133,6 +155,19 @@ export class Matrix {
 
 /** mat4 transformation constructors */
 export class Mat4 {
+    /**
+     * apply a transformation to a vec3
+     *
+     * @param {Matrix} transform
+     * @param {Array<number, 3>} v
+     * @returns {Array<number, 3>}
+     */
+    static apply(transform, v) {
+        const v4 = new Matrix(1, [...v, 1.0]);
+        const res = transform.mul(v4);
+        return res.data.slice(0, 3);
+    }
+
     /** @returns {Matrix} */
     static identity() {
         return new Matrix(4, [
@@ -140,6 +175,50 @@ export class Mat4 {
             0, 1, 0, 0,
             0, 0, 1, 0,
             0, 0, 0, 1,
+        ]);
+    }
+
+    /**
+     * @param {...Matrix} matrices
+     * @returns {Matrix}
+     */
+    static chain(...matrices) {
+        return matrices.reduceRight((a, b) => a.mul(b), Mat4.identity())
+    }
+
+    /**
+     * [mostly built from this](http://webgl.brown37.net/09_projections/04_projections_perspective_math.html)
+     *
+     * @typedef {Object} PerspectiveConfig
+     * @property {number} near
+     * @property {number} far
+     * @property {number} width
+     * @property {number} height
+     *
+     * @param {PerspectiveConfig} cfg
+     * @returns {Matrix}
+     */
+    static perspective(cfg) {
+        const {near, far, width, height} = cfg;
+
+        // properly scale depth to ndc with w value
+        const c1 = (far + near) / (far - near);
+        const c2 = (2 * far * near) / (far - near);
+
+        // scale x and y to screen ratio
+        let sx = 1.0;
+        let sy = 1.0;
+        if (width > height) {
+            sx = height / width;
+        } else {
+            sy = width / height;
+        }
+
+        return new Matrix(4, [
+            sx, 0, 0, 0,
+            0, sy, 0, 0,
+            0, 0, c1, 1,
+            0, 0, c2, 1
         ]);
     }
 
@@ -166,10 +245,10 @@ export class Mat4 {
      */
     static translate(x, y, z) {
         return new Matrix(4, [
-            1, 0, 0, x,
-            0, 1, 0, y,
-            0, 0, 1, z,
-            0, 0, 0, 1,
+            1, 0, 0, 0,
+            0, 1, 0, 0,
+            0, 0, 1, 0,
+            x, y, z, 1,
         ]);
     }
 
@@ -182,8 +261,8 @@ export class Mat4 {
         const s = Math.sin(angle);
         return new Matrix(4, [
             1, 0, 0, 0,
-            0, c, -s, 0,
-            0, s, c, 0,
+            0, c, s, 0,
+            0, -s, c, 0,
             0, 0, 0, 1,
         ]);
     }
@@ -196,9 +275,9 @@ export class Mat4 {
         const c = Math.cos(angle);
         const s = Math.sin(angle);
         return new Matrix(4, [
-            c, 0, -s, 0,
+            c, 0, s, 0,
             0, 1, 0, 0,
-            s, 0, c, 0,
+            -s, 0, c, 0,
             0, 0, 0, 1,
         ]);
     }
@@ -211,8 +290,8 @@ export class Mat4 {
         const c = Math.cos(angle);
         const s = Math.sin(angle);
         return new Matrix(4, [
-            c, -s, 0, 0,
-            s, c, 0, 0,
+            c, s, 0, 0,
+            -s, c, 0, 0,
             0, 0, 1, 0,
             0, 0, 0, 1,
         ]);

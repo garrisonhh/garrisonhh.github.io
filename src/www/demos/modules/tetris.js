@@ -1,5 +1,7 @@
 import * as utils from './utils.js';
-import {Mat4} from './matrix.js';
+import {Matrix, Mat4} from './matrix.js';
+
+let ONCE = false;
 
 /**
  * @typedef {Object} TetrisContext
@@ -13,12 +15,6 @@ import {Mat4} from './matrix.js';
 function tetrisLoop(ctx, ts) {
     const gl = ctx.gl;
 
-    const vp =
-        Mat4.scale(gl.canvas.height / gl.canvas.width, 1.0, 1.0)
-            .mul(Mat4.scale(0.1, 0.1, 0.1))
-            .mul(Mat4.rotateY(ts * 0.001))
-            .mul(Mat4.rotateX(ts * 0.002));
-
     gl.clearColor(0, 0, 0, 1);
     gl.clear(gl.COLOR_BUFFER_BIT);
 
@@ -28,17 +24,30 @@ function tetrisLoop(ctx, ts) {
     gl.uniform2f(ctx.shader.uniforms.get('resolution'), gl.canvas.width, gl.canvas.height);
 
     const coords = [
-        [0.0, 0.0, 0.0],
-        [0.2, 0.0, 0.0],
-        [0.0, 0.2, 0.0],
-        [-0.2, 0.0, 0.0],
-        [0.0, -0.2, 0.0],
+        [0, 0, 0],
+        [1, 0, 0],
+        [0, 1, 0],
+        [0, 0, 1],
+        [-1, 0, 0],
+        [0, -1, 0],
+        [0, 0, -1],
     ];
     for (const coord of coords) {
-        const mvp = vp.mul(Mat4.translate(...coord));
+        const mvp = Mat4.chain(
+            Mat4.perspective({
+                near: 0.01,
+                far: 100.0,
+                width: gl.canvas.width,
+                height: gl.canvas.height,
+            }),
+            Mat4.translate(0, 0, 5),
+            Mat4.rotateZ(ts * 0.003),
+            Mat4.rotateY(ts * 0.002),
+            Mat4.rotateX(ts * 0.001),
+            Mat4.translate(...coord),
+        );
 
         gl.uniformMatrix4fv(ctx.shader.uniforms.get('mvp'), false, new Float32Array(mvp.data));
-
         gl.drawArrays(gl.TRIANGLES, 0, ctx.prism.count);
     }
 
@@ -57,13 +66,15 @@ function tetrisLoop(ctx, ts) {
  * @returns {PrismMesh}
  */
 function loadPrism(gl, attrs) {
-    const angle = (2.0 * Math.PI) / 3.0;
-    const pA = [Math.cos(0) * 0.5, 0.0, Math.sin(0) * 0.5];
-    const pB = [Math.cos(angle) * 0.5, 0.0, Math.sin(angle) * 0.5];
-    const pC = [Math.cos(angle * 2.0) * 0.5, 0.0, Math.sin(angle * 2.0) * 0.5];
-    const pD = [0.0, Math.hypot(...pA), 0.0];
+    const tipToBase = Mat4.rotateX((3.0 * Math.PI) / 5.0);
+    const baseToBase = Mat4.rotateY((2.0 * Math.PI) / 3.0);
 
-    const prismVertices = [pD, pA, pB, pC];
+    const pA = [0.0, 0.5, 0.0];
+    const pB = Mat4.apply(tipToBase, pA);
+    const pC = Mat4.apply(baseToBase, pB);
+    const pD = Mat4.apply(baseToBase, pC);
+
+    const prismVertices = [pA, pB, pC, pD];
     const prismColors = [
         [1.0, 0.0, 0.0],
         [0.0, 1.0, 0.0],
@@ -76,6 +87,22 @@ function loadPrism(gl, attrs) {
         0, 3, 1,
         1, 2, 3,
     ];
+
+    const dist = (a, b) => {
+        let s = 0;
+        for (let i = 0; i < 3; ++i) {
+            const v = a[i] - b[i];
+            s += v * v;
+        }
+        return Math.sqrt(s);
+    };
+
+    console.log(dist(pA, [0, 0, 0]));
+    console.log(dist(pB, [0, 0, 0]));
+    console.log(dist(pC, [0, 0, 0]));
+    console.log(dist(pD, [0, 0, 0]));
+    console.log(dist(pA, pB));
+    console.log(dist(pB, pC));
 
     const vertices = prismIndices.flatMap(i => prismVertices[i]);
     const colors = prismIndices.flatMap(i => prismColors[i]);
@@ -95,8 +122,6 @@ function loadPrism(gl, attrs) {
 
     gl.bindBuffer(gl.ARRAY_BUFFER, null);
 
-    console.log(colors);
-
     const colorBuffer = gl.createBuffer();
     console.assert(colorBuffer != null);
     gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
@@ -107,8 +132,6 @@ function loadPrism(gl, attrs) {
     gl.vertexAttribPointer(aColorLoc, 3, gl.FLOAT, false, 0, 0);
 
     gl.bindBuffer(gl.ARRAY_BUFFER, null);
-
-    console.log(aColorLoc, aVertexLoc);
 
     // TODO figure out how element array buffers work...
     // const ebo = gl.createBuffer();
