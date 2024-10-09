@@ -1,13 +1,12 @@
 import * as utils from './utils.js';
-import {Matrix, Mat4} from './matrix.js';
-
-let ONCE = false;
+import { Mat4 } from './matrix.js';
+import * as parseObj from './parseObj.js';
 
 /**
  * @typedef {Object} TetrisContext
  * @property {WebGL2RenderingContext} gl
  * @property {utils.Shader} shader
- * @property {PrismMesh} prism
+ * @property {Mesh} mesh
  *
  * @param {TetrisContext} ctx
  * @param {DOMHighResTimeStamp} ts
@@ -18,7 +17,6 @@ function tetrisLoop(ctx, ts) {
     gl.clearColor(0, 0, 0, 1);
     gl.clear(gl.COLOR_BUFFER_BIT);
 
-    gl.bindVertexArray(ctx.prism.vao);
     gl.useProgram(ctx.shader.program);
     gl.uniform1f(ctx.shader.uniforms.get('timestamp'), ts);
     gl.uniform2f(ctx.shader.uniforms.get('resolution'), gl.canvas.width, gl.canvas.height);
@@ -41,75 +39,42 @@ function tetrisLoop(ctx, ts) {
                 height: gl.canvas.height,
             }),
             Mat4.translate(0, 0, 5),
-            Mat4.rotateZ(ts * 0.003),
-            Mat4.rotateY(ts * 0.002),
+            // Mat4.rotateZ(ts * 0.003),
+            // Mat4.rotateY(ts * 0.002),
             Mat4.rotateX(ts * 0.001),
             Mat4.translate(...coord),
         );
 
         gl.uniformMatrix4fv(ctx.shader.uniforms.get('mvp'), false, new Float32Array(mvp.data));
-        gl.drawArrays(gl.TRIANGLES, 0, ctx.prism.count);
+        gl.drawArrays(gl.TRIANGLES, 0, ctx.mesh.model.faces.length / 3);
     }
-
-    gl.bindVertexArray(null);
 }
 
 /**
- * loads a prism model onto the gpu
- *
- * @typedef {Object} PrismMesh
- * @property {GLint} vao
- * @property {number} count
+ * @typedef {Object} Mesh
+ * @property {parseObj.Model} model
  *
  * @param {WebGL2RenderingContext} gl
  * @param {utils.ShaderAttrs} attrs
- * @returns {PrismMesh}
+ * @param {string} objText
+ * @returns {Mesh}
  */
-function loadPrism(gl, attrs) {
-    const tipToBase = Mat4.rotateX((3.0 * Math.PI) / 5.0);
-    const baseToBase = Mat4.rotateY((2.0 * Math.PI) / 3.0);
+function loadMinoBlock(gl, attrs, objText) {
+    // const model = parseObj.parseObj(objText);
 
-    const pA = [0.0, 0.5, 0.0];
-    const pB = Mat4.apply(tipToBase, pA);
-    const pC = Mat4.apply(baseToBase, pB);
-    const pD = Mat4.apply(baseToBase, pC);
-
-    const prismVertices = [pA, pB, pC, pD];
-    const prismColors = [
-        [1.0, 0.0, 0.0],
-        [0.0, 1.0, 0.0],
-        [0.0, 0.0, 1.0],
-        [1.0, 1.0, 0.0],
-    ];
-    const prismIndices = [
-        0, 1, 2,
-        0, 2, 3,
-        0, 3, 1,
-        1, 2, 3,
-    ];
-
-    const dist = (a, b) => {
-        let s = 0;
-        for (let i = 0; i < 3; ++i) {
-            const v = a[i] - b[i];
-            s += v * v;
-        }
-        return Math.sqrt(s);
+    const model = {
+        vertices: new Float32Array([
+            0.0, 1.0, 0.0,
+            1.0, 0.0, 0.0,
+            -1.0, 0.0, 0.0,
+        ]),
+        faces: new Uint16Array([
+            0, 1, 2
+        ]),
     };
 
-    console.log(dist(pA, [0, 0, 0]));
-    console.log(dist(pB, [0, 0, 0]));
-    console.log(dist(pC, [0, 0, 0]));
-    console.log(dist(pD, [0, 0, 0]));
-    console.log(dist(pA, pB));
-    console.log(dist(pB, pC));
-
-    const vertices = prismIndices.flatMap(i => prismVertices[i]);
-    const colors = prismIndices.flatMap(i => prismColors[i]);
-
-    const vao = gl.createVertexArray();
-    console.assert(vao != null);
-    gl.bindVertexArray(vao);
+    const vertices = [...model.faces].flatMap((i) => [...model.vertices.slice(i * 3, (i + 1) * 3)]);
+    console.log(vertices);
 
     const vertexBuffer = gl.createBuffer();
     console.assert(vertexBuffer != null);
@@ -122,26 +87,7 @@ function loadPrism(gl, attrs) {
 
     gl.bindBuffer(gl.ARRAY_BUFFER, null);
 
-    const colorBuffer = gl.createBuffer();
-    console.assert(colorBuffer != null);
-    gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(colors), gl.STATIC_DRAW);
-
-    const aColorLoc = attrs.get('aColor');
-    gl.enableVertexAttribArray(aColorLoc);
-    gl.vertexAttribPointer(aColorLoc, 3, gl.FLOAT, false, 0, 0);
-
-    gl.bindBuffer(gl.ARRAY_BUFFER, null);
-
-    // TODO figure out how element array buffers work...
-    // const ebo = gl.createBuffer();
-    // console.assert(ebo != null);
-    // gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ebo);
-    // gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(prismIndices), gl.STATIC_DRAW);
-
-    gl.bindVertexArray(null);
-
-    return { vao, count: vertices.length / 3 };
+    return { model };
 }
 
 /**
@@ -159,8 +105,9 @@ export async function initTetris(canvas) {
         [gl.FRAGMENT_SHADER, fragSource],
     ], ['aVertex', 'aColor'], ['mvp', 'timestamp', 'resolution']);
 
-    const prism = loadPrism(gl, shader.attributes);
+    const blockObj = await utils.loadTextFromUrl('/demos/resources/tetromino-block.obj');
+    const mesh = loadMinoBlock(gl, shader.attributes, blockObj);
 
-    const context = { gl, shader, prism };
+    const context = { gl, shader, mesh };
     utils.requestAnimationFrame(context, tetrisLoop);
 }
