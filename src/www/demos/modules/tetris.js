@@ -7,7 +7,7 @@ import * as parseObj from './parseObj.js';
  * @property {WebGL2RenderingContext} gl
  * @property {utils.Shader} shader
  * @property {Mesh} mesh
- * @property {GLint} aMatModelLoc
+ * @property {number} offsetBuffer
  *
  * @param {TetrisContext} ctx
  * @param {DOMHighResTimeStamp} ts
@@ -15,13 +15,40 @@ import * as parseObj from './parseObj.js';
 function tetrisLoop(ctx, ts) {
     const gl = ctx.gl;
 
+    const blocks = []
+    const count = 16;
+    const radius = 5.0;
+    for (let i = 0; i < count; ++i) {
+        const x = i / count;
+        const a = x * Math.PI * 2.0
+        blocks.push([
+            Math.cos(a) * radius,
+            Math.sin(a) * radius,
+            0.0,
+        ]);
+    };
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, ctx.offsetBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(blocks.flat()), gl.DYNAMIC_DRAW);
+    const aOffsetLoc = ctx.shader.attributes.get('aOffset');
+    gl.enableVertexAttribArray(aOffsetLoc);
+    gl.vertexAttribPointer(aOffsetLoc, 3, gl.FLOAT, false, 0, 0);
+    gl.vertexAttribDivisor(aOffsetLoc, 1);
+    gl.bindBuffer(gl.ARRAY_BUFFER, null);
+
     gl.clearColor(0, 0, 0, 1);
     gl.clear(gl.COLOR_BUFFER_BIT);
 
     gl.useProgram(ctx.shader.program);
 
-    const matModel = Mat4.translate(0, 0, 10);
-    const matView = Mat4.identity();
+    const matModel = Mat4.chain(
+        Mat4.scale(0.5, 0.5, 0.5),
+    );
+    const matView = Mat4.chain(
+        Mat4.translate(0.0, 0.0, 10.0),
+        Mat4.rotateX(-Math.PI / 8.0),
+        Mat4.rotateY(ts * 0.001),
+    );
     const matProjection = Mat4.perspective({
         near: 0.01,
         far: 100.0,
@@ -35,7 +62,7 @@ function tetrisLoop(ctx, ts) {
     gl.uniformMatrix4fv(ctx.shader.uniforms.get('matNormal'), false, new Float32Array(matNormal.data));
     gl.uniformMatrix4fv(ctx.shader.uniforms.get('mvp'), false, new Float32Array(mvp.data));
     gl.uniform3f(ctx.shader.uniforms.get('color'), ...[0.9, 0.7, 0.1]);
-    gl.drawArrays(gl.TRIANGLES, 0, ctx.mesh.model.faces.length * 3);
+    gl.drawArraysInstanced(gl.TRIANGLES, 0, ctx.mesh.model.faces.length * 3, blocks.length);
 }
 
 /**
@@ -96,13 +123,15 @@ export async function initTetris(canvas) {
             [gl.VERTEX_SHADER, vertSource],
             [gl.FRAGMENT_SHADER, fragSource],
         ],
-        ['aVertex', 'aNormal'],
+        ['aVertex', 'aNormal', 'aOffset'],
         ['matNormal', 'mvp', 'color']
     );
 
     const blockObj = await utils.loadTextFromUrl('/demos/resources/tetromino-block.obj');
     const mesh = loadMinoBlock(gl, shader.attributes, blockObj);
 
-    const context = { gl, shader, mesh };
+    const offsetBuffer = gl.createBuffer();
+
+    const context = { gl, shader, mesh, offsetBuffer };
     utils.requestAnimationFrame(context, tetrisLoop);
 }
