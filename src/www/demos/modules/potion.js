@@ -20,13 +20,10 @@ function backgroundLoop(ctx, ts) {
     gl.clear(gl.COLOR_BUFFER_BIT);
 
     gl.useProgram(ctx.shader.program);
-    gl.enableVertexAttribArray(ctx.shader.attributes['aTexCoord']);
 
     gl.uniform1f(ctx.shader.uniforms.get('timestamp'), ts);
     gl.uniform2f(ctx.shader.uniforms.get('resolution'), gl.canvas.width, gl.canvas.height);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-
-    gl.disableVertexAttribArray(ctx.shader.attributes.aTexCoord);
 }
 
 /**
@@ -35,6 +32,7 @@ function backgroundLoop(ctx, ts) {
  */
 export async function initBackground(canvas) {
     const gl = setupWebGLContext(canvas);
+
     const shader = loadShader(gl, [
         [gl.VERTEX_SHADER, await loadTextFromUrl('/demos/resources/bg.vert')],
         [gl.FRAGMENT_SHADER, await loadTextFromUrl('/demos/resources/bg.frag')],
@@ -51,6 +49,7 @@ export async function initBackground(canvas) {
         1.0, 1.0,
     ];
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(texcoords), gl.STATIC_DRAW);
+    gl.enableVertexAttribArray(shader.attributes['aTexCoord']);
     gl.vertexAttribPointer(
         shader.attributes.get('aTexCoord'),
         2,

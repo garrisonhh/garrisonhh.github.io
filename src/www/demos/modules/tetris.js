@@ -113,7 +113,6 @@ async function setupGame(canvas) {
             x: ev.pageX - canvasX,
             y: ev.pageY - canvasY,
         };
-        console.log("click:", event);
 
         tetris.eventQueue.push(event);
     }, false);
@@ -123,8 +122,6 @@ async function setupGame(canvas) {
         if (key === undefined) return;
 
         const event = { type: "keydown", key };
-        console.log("keydown:", event);
-
         tetris.eventQueue.push(event);
     }, false);
 
@@ -162,8 +159,18 @@ function updateGame(tetris, ts) {
 function drawIntro(ctx, ts) {
     const gl = ctx.gl;
 
-    gl.useProgram(ctx.shader.program);
+    // background
+    gl.useProgram(ctx.bgShader.program);
+    gl.bindVertexArray(ctx.bgMesh.vao);
 
+    gl.uniform1f(ctx.bgShader.uniforms.get('timestamp'), ts);
+    gl.uniform2f(ctx.bgShader.uniforms.get('resolution'), gl.canvas.width, gl.canvas.height);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+    gl.bindVertexArray(null);
+    gl.clear(gl.DEPTH_BUFFER_BIT);
+
+    // tetris2000 text
     const matModel = Mat4.chain(
         Mat4.rotateY(Math.cos(ts * 0.001) * (0.2 * Math.PI) + (-0.5 * Math.PI)),
         Mat4.translate(0.0, -1.0, -3.0),
@@ -182,11 +189,12 @@ function drawIntro(ctx, ts) {
     const matNormal = Mat4.invert(matView.mul(matModel)).transpose();
     const mvp = Mat4.chain(matProjection, matView, matModel);
 
+    gl.useProgram(ctx.modelShader.program);
     gl.bindVertexArray(ctx.tetris2000Mesh.vao);
 
-    gl.uniformMatrix4fv(ctx.shader.uniforms.get('matNormal'), false, new Float32Array(matNormal.data));
-    gl.uniformMatrix4fv(ctx.shader.uniforms.get('mvp'), false, new Float32Array(mvp.data));
-    gl.uniform3f(ctx.shader.uniforms.get('color'), 1.0, 0.0, 0.0);
+    gl.uniformMatrix4fv(ctx.modelShader.uniforms.get('matNormal'), false, new Float32Array(matNormal.data));
+    gl.uniformMatrix4fv(ctx.modelShader.uniforms.get('mvp'), false, new Float32Array(mvp.data));
+    gl.uniform3f(ctx.modelShader.uniforms.get('color'), 1.0, 0.0, 0.0);
     gl.drawArrays(gl.TRIANGLES, 0, ctx.tetris2000Mesh.model.faces.length * 3);
 
     gl.bindVertexArray(null);
@@ -212,13 +220,13 @@ function drawInGame(ctx, res) {
 
     gl.bindBuffer(gl.ARRAY_BUFFER, ctx.offsetBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(blocks.flat()), gl.DYNAMIC_DRAW);
-    const aOffsetLoc = ctx.shader.attributes.get('aOffset');
+    const aOffsetLoc = ctx.modelShader.attributes.get('aOffset');
     gl.enableVertexAttribArray(aOffsetLoc);
     gl.vertexAttribPointer(aOffsetLoc, 3, gl.FLOAT, false, 0, 0);
     gl.vertexAttribDivisor(aOffsetLoc, 1);
     gl.bindBuffer(gl.ARRAY_BUFFER, null);
 
-    gl.useProgram(ctx.shader.program);
+    gl.useProgram(ctx.modelShader.program);
 
     const matModel = Mat4.chain(
         Mat4.scale(0.5, 0.5, 0.5),
@@ -236,9 +244,9 @@ function drawInGame(ctx, res) {
     const matNormal = Mat4.invert(matView.mul(matModel)).transpose();
     const mvp = Mat4.chain(matProjection, matView, matModel);
 
-    gl.uniformMatrix4fv(ctx.shader.uniforms.get('matNormal'), false, new Float32Array(matNormal.data));
-    gl.uniformMatrix4fv(ctx.shader.uniforms.get('mvp'), false, new Float32Array(mvp.data));
-    gl.uniform3f(ctx.shader.uniforms.get('color'), ...[0.9, 0.7, 0.1]);
+    gl.uniformMatrix4fv(ctx.modelShader.uniforms.get('matNormal'), false, new Float32Array(matNormal.data));
+    gl.uniformMatrix4fv(ctx.modelShader.uniforms.get('mvp'), false, new Float32Array(mvp.data));
+    gl.uniform3f(ctx.modelShader.uniforms.get('color'), ...[0.9, 0.7, 0.1]);
     gl.drawArraysInstanced(gl.TRIANGLES, 0, ctx.blockMesh.model.faces.length * 3, blocks.length);
 
     gl.bindVertexArray(null);
@@ -248,7 +256,9 @@ function drawInGame(ctx, res) {
  * @typedef {Object} TetrisContext
  * @property {WebGL2RenderingContext} gl
  * @property {Tetris} tetris
- * @property {utils.Shader} shader
+ * @property {utils.Shader} bgShader
+ * @property {utils.Shader} modelShader
+ * @property {BgMesh} bgMesh
  * @property {Mesh} blockMesh
  * @property {Mesh} tetris2000Mesh
  * @property {number} offsetBuffer
@@ -260,7 +270,6 @@ function tetrisLoop(ctx, ts) {
     const gl = ctx.gl;
 
     const res = updateGame(ctx.tetris, ts);
-    console.log(res.board);
 
     gl.clearColor(0, 0, 0, 1);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
@@ -273,6 +282,44 @@ function tetrisLoop(ctx, ts) {
 }
 
 /**
+ * loads a background mesh to a vao, given a shader with attr 'vec2 aTexCoord'
+ *
+ * @typedef {Object} BgMesh
+ * @property {number} vao
+ *
+ * @param {WebGL2RenderingContext} gl
+ * @param {number} aTexCoordLoc
+ * @returns {BgMesh}
+ */
+function loadBgMesh(gl, aTexCoordLoc) {
+    const vao = gl.createVertexArray();
+    console.assert(vao != null);
+    gl.bindVertexArray(vao);
+
+    const texCoordBuffer = gl.createBuffer();
+    console.assert(texCoordBuffer != null);
+    gl.bindBuffer(gl.ARRAY_BUFFER, texCoordBuffer);
+
+    const texcoords = [
+        0.0, 0.0,
+        1.0, 0.0,
+        0.0, 1.0,
+        1.0, 1.0,
+    ];
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(texcoords), gl.STATIC_DRAW);
+    gl.enableVertexAttribArray(aTexCoordLoc);
+    gl.vertexAttribPointer(aTexCoordLoc, 2, gl.FLOAT, false, 0, 0);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, null);
+    gl.bindVertexArray(null);
+
+    return { vao };
+}
+
+/**
+ * loads a 3d model mesh to a vao, given a shader with attrs 'vec3 aVertex' and
+ * 'vec3 aNormal'
+ *
  * @typedef {Object} Mesh
  * @property {parseObj.Model} model
  * @property {number} vao
@@ -312,7 +359,6 @@ function loadMesh(gl, attrs, objText) {
     gl.vertexAttribPointer(aNormalLoc, 3, gl.FLOAT, false, 0, 0);
 
     gl.bindBuffer(gl.ARRAY_BUFFER, null);
-
     gl.bindVertexArray(null);
 
     return { model, vao };
@@ -325,11 +371,12 @@ function loadMesh(gl, attrs, objText) {
 export async function initTetris(canvas) {
     const gl = utils.setupWebGLContext(canvas);
     gl.enable(gl.DEPTH_TEST);
-    // gl.enable(gl.CULL_FACE);
+    gl.enable(gl.CULL_FACE);
 
     const modelVertSource = await utils.loadTextFromUrl('/demos/resources/tetris-model.vert');
     const modelFragSource = await utils.loadTextFromUrl('/demos/resources/tetris-model.frag');
-    const modelShader = utils.loadShader(gl,
+    const modelShader = utils.loadShader(
+        gl,
         [
             [gl.VERTEX_SHADER, modelVertSource],
             [gl.FRAGMENT_SHADER, modelFragSource],
@@ -337,6 +384,20 @@ export async function initTetris(canvas) {
         ['aVertex', 'aNormal', 'aOffset'],
         ['matNormal', 'mvp', 'color']
     );
+
+    const bgVertSource = await utils.loadTextFromUrl('/demos/resources/tetris-intro-bg.vert');
+    const bgFragSource = await utils.loadTextFromUrl('/demos/resources/tetris-intro-bg.frag');
+    const bgShader = utils.loadShader(
+        gl,
+        [
+            [gl.VERTEX_SHADER, bgVertSource],
+            [gl.FRAGMENT_SHADER, bgFragSource],
+        ],
+        ['aTexCoord'],
+        ['timestamp', 'resolution']
+    );
+
+    const bgMesh = loadBgMesh(gl, bgShader.attributes.get('aTexCoord'));
 
     const blockObj = await utils.loadTextFromUrl('/demos/resources/tetromino-block.obj');
     const tetris2000Obj = await utils.loadTextFromUrl('/demos/resources/tetris2000.obj');
@@ -352,8 +413,10 @@ export async function initTetris(canvas) {
     const tetris = await setupGame(canvas);
     const context = {
         gl,
-        shader: modelShader,
+        bgShader,
+        modelShader,
         offsetBuffer,
+        bgMesh,
         blockMesh,
         tetris2000Mesh,
 
