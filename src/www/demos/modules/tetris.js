@@ -1,6 +1,7 @@
 import * as utils from './utils.js';
 import { Mat4 } from './matrix.js';
 import * as parseObj from './parseObj.js';
+import * as oklab from './oklab.js';
 
 function wasmStrlen(cart, addr) {
     const memory = cart.exports.memory;
@@ -159,12 +160,25 @@ function updateGame(tetris, ts) {
 function drawIntro(ctx, ts) {
     const gl = ctx.gl;
 
+    const angleDiff = Math.PI * 2.0 / 3.0;
+    const colorAngle = ts * 1e-4 * Math.PI;
+
+    const [colorA, colorB, colorC] = new Array(3).fill(null).map((_, i) => {
+        const angle = colorAngle + i * angleDiff;
+        const lab = [0.5, Math.cos(angle) * 0.5, Math.sin(angle) * 0.5];
+        return lab;
+    });
+
+    const tetris2000Color = oklab.rgbFromOklab(colorC);
+
     // background
     gl.useProgram(ctx.bgShader.program);
     gl.bindVertexArray(ctx.bgMesh.vao);
 
     gl.uniform1f(ctx.bgShader.uniforms.get('timestamp'), ts);
     gl.uniform2f(ctx.bgShader.uniforms.get('resolution'), gl.canvas.width, gl.canvas.height);
+    gl.uniform3f(ctx.bgShader.uniforms.get('colorA'), ...colorA);
+    gl.uniform3f(ctx.bgShader.uniforms.get('colorB'), ...colorB);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
     gl.bindVertexArray(null);
@@ -193,7 +207,8 @@ function drawIntro(ctx, ts) {
 
     gl.uniformMatrix4fv(ctx.modelShader.uniforms.get('matNormal'), false, new Float32Array(matNormal.data));
     gl.uniformMatrix4fv(ctx.modelShader.uniforms.get('mvp'), false, new Float32Array(mvp.data));
-    gl.uniform3f(ctx.modelShader.uniforms.get('color'), 1.0, 0.0, 0.0);
+    gl.uniform3f(ctx.modelShader.uniforms.get('color'), ...tetris2000Color);
+    gl.uniform3f(ctx.modelShader.uniforms.get('lightPos'), 0.0, 0.0, -100.0);
     gl.drawArrays(gl.TRIANGLES, 0, ctx.tetris2000Mesh.model.faces.length * 3);
 
     gl.bindVertexArray(null);
@@ -231,7 +246,7 @@ function drawInGame(ctx, res) {
         Mat4.scale(0.5, 0.5, 0.5),
     );
     const matView = Mat4.chain(
-        Mat4.translate(0.0, 0.0, 5.0),
+        Mat4.translate(0.0, 0.0, -5.0),
     );
     const matProjection = Mat4.perspective({
         near: 0.01,
@@ -246,6 +261,7 @@ function drawInGame(ctx, res) {
     gl.uniformMatrix4fv(ctx.modelShader.uniforms.get('matNormal'), false, new Float32Array(matNormal.data));
     gl.uniformMatrix4fv(ctx.modelShader.uniforms.get('mvp'), false, new Float32Array(mvp.data));
     gl.uniform3f(ctx.modelShader.uniforms.get('color'), ...[0.9, 0.7, 0.1]);
+    gl.uniform3f(ctx.modelShader.uniforms.get('lightPos'), 0.0, 5.0, 0.0);
     gl.drawArraysInstanced(gl.TRIANGLES, 0, ctx.blockMesh.model.faces.length * 3, blocks.length);
 
     gl.bindVertexArray(null);
@@ -381,7 +397,7 @@ export async function initTetris(canvas) {
             [gl.FRAGMENT_SHADER, modelFragSource],
         ],
         ['aVertex', 'aNormal', 'aOffset'],
-        ['matNormal', 'mvp', 'color']
+        ['matNormal', 'mvp', 'color', 'lightPos']
     );
 
     const bgVertSource = await utils.loadTextFromUrl('/demos/resources/tetris-intro-bg.vert');
@@ -393,7 +409,7 @@ export async function initTetris(canvas) {
             [gl.FRAGMENT_SHADER, bgFragSource],
         ],
         ['aTexCoord'],
-        ['timestamp', 'resolution']
+        ['timestamp', 'resolution', 'colorA', 'colorB']
     );
 
     const bgMesh = loadBgMesh(gl, bgShader.attributes.get('aTexCoord'));
