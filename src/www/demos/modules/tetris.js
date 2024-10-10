@@ -3,88 +3,88 @@ import { Mat4 } from './matrix.js';
 import * as parseObj from './parseObj.js';
 
 function wasmStrlen(cart, addr) {
-  const memory = cart.exports.memory;
-  const view = new DataView(memory.buffer);
+    const memory = cart.exports.memory;
+    const view = new DataView(memory.buffer);
 
-  // get cstr len
-  let len = 0;
-  while (view.getUint8(addr + len) !== 0) {
-    len++;
-  }
+    // get cstr len
+    let len = 0;
+    while (view.getUint8(addr + len) !== 0) {
+        len++;
+    }
 
-  return len;
+    return len;
 }
 
 function wasmAlloc(cart, nbytes) {
-  const addr = cart.exports.alloc(nbytes);
+    const addr = cart.exports.alloc(nbytes);
 
-  if (addr < 0) {
-    throw new Error("wasm OOM");
-  }
+    if (addr < 0) {
+        throw new Error("wasm OOM");
+    }
 
-  return addr;
+    return addr;
 }
 
 // loads a js string from a wasm c string
 function readString(cart, addr) {
-  const mem = cart.exports.memory;
-  const len = wasmStrlen(cart, addr);
+    const mem = cart.exports.memory;
+    const len = wasmStrlen(cart, addr);
 
-  const buf = new Uint8Array(mem.buffer, addr, len);
-  const str = new TextDecoder().decode(buf);
+    const buf = new Uint8Array(mem.buffer, addr, len);
+    const str = new TextDecoder().decode(buf);
 
-  return str;
+    return str;
 }
 
 // allocate and write a wasm c string
 function dupeString(cart, str) {
-  const mem = cart.exports.memory;
-  const src = new TextEncoder().encode(str);
+    const mem = cart.exports.memory;
+    const src = new TextEncoder().encode(str);
 
-  const addr = wasmAlloc(cart, src.length + 1);
+    const addr = wasmAlloc(cart, src.length + 1);
 
-  new Uint8Array(mem.buffer, addr, src.length).set(src);
-  new DataView(mem.buffer, addr).setUint8(src.length, 0);
+    new Uint8Array(mem.buffer, addr, src.length).set(src);
+    new DataView(mem.buffer, addr).setUint8(src.length, 0);
 
-  return addr;
+    return addr;
 }
 
 // free a wasm c string
 function freeString(cart, addr) {
-  const str = readString(cart, addr);
-  const len = new TextEncoder().encode(str).length + 1;
+    const str = readString(cart, addr);
+    const len = new TextEncoder().encode(str).length + 1;
 
-  cart.exports.free(addr, len);
+    cart.exports.free(addr, len);
 }
 
 // loads json from wasm c string
 function readJSON(cart, addr) {
-  return JSON.parse(readString(cart, addr));
+    return JSON.parse(readString(cart, addr));
 }
 
 async function initWASM() {
-  const memory = new WebAssembly.Memory({
-    initial: 10,
-    maximum: 100,
-    shared: true,
-  });
+    const memory = new WebAssembly.Memory({
+        initial: 10,
+        maximum: 100,
+        shared: true,
+    });
 
-  const path = "/bin/tetris.wasm";
-  const src = await WebAssembly.instantiateStreaming(fetch(path), {
-    js: { mem: memory },
-  });
+    const path = "/bin/tetris.wasm";
+    const src = await WebAssembly.instantiateStreaming(fetch(path), {
+        js: { mem: memory },
+    });
 
-  return src.instance;
+    return src.instance;
 }
 
 const CONTROLS = new Map(Object.entries({
-  "Escape": "pause",
-  "ArrowLeft": "left",
-  "ArrowRight": "right",
-  "ArrowUp": "clockwise",
-  "z": "counterclockwise",
-  "x": "clockwise",
-  " ": "hard_drop",
+    "Escape": "pause",
+    "ArrowLeft": "left",
+    "ArrowRight": "right",
+    "ArrowUp": "clockwise",
+    "z": "counterclockwise",
+    "x": "clockwise",
+    " ": "hard_drop",
 }));
 
 /**
@@ -159,22 +159,41 @@ function updateGame(tetris, ts) {
     }
 }
 
-/**
- * @typedef {Object} TetrisContext
- * @property {WebGL2RenderingContext} gl
- * @property {Tetris} tetris
- * @property {utils.Shader} shader
- * @property {Mesh} mesh
- * @property {number} offsetBuffer
- *
- * @param {TetrisContext} ctx
- * @param {DOMHighResTimeStamp} ts
- */
-function tetrisLoop(ctx, ts) {
+function drawIntro(ctx, ts) {
     const gl = ctx.gl;
 
-    const res = updateGame(ctx.tetris, ts);
-    console.log(res.board);
+    gl.useProgram(ctx.shader.program);
+
+    const matModel = Mat4.chain(
+        Mat4.rotateY(Math.cos(ts * 0.001) * (0.2 * Math.PI) + (-0.5 * Math.PI)),
+        Mat4.translate(0.0, -1.0, -3.0),
+        Mat4.scale(-1.0, 1.0, 1.0),
+    );
+    const matView = Mat4.chain(
+        Mat4.translate(0.0, 0.0, 3.0),
+    );
+    const matProjection = Mat4.perspective({
+        near: 0.01,
+        far: 100.0,
+        width: gl.canvas.width,
+        height: gl.canvas.height,
+    });
+
+    const matNormal = Mat4.invert(matView.mul(matModel)).transpose();
+    const mvp = Mat4.chain(matProjection, matView, matModel);
+
+    gl.bindVertexArray(ctx.tetris2000Mesh.vao);
+
+    gl.uniformMatrix4fv(ctx.shader.uniforms.get('matNormal'), false, new Float32Array(matNormal.data));
+    gl.uniformMatrix4fv(ctx.shader.uniforms.get('mvp'), false, new Float32Array(mvp.data));
+    gl.uniform3f(ctx.shader.uniforms.get('color'), 1.0, 0.0, 0.0);
+    gl.drawArrays(gl.TRIANGLES, 0, ctx.tetris2000Mesh.model.faces.length * 3);
+
+    gl.bindVertexArray(null);
+}
+
+function drawInGame(ctx, res) {
+    const gl = ctx.gl;
 
     const blocks = [];
     {
@@ -189,6 +208,8 @@ function tetrisLoop(ctx, ts) {
         }
     }
 
+    gl.bindVertexArray(ctx.blockMesh.vao);
+
     gl.bindBuffer(gl.ARRAY_BUFFER, ctx.offsetBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(blocks.flat()), gl.DYNAMIC_DRAW);
     const aOffsetLoc = ctx.shader.attributes.get('aOffset');
@@ -197,17 +218,13 @@ function tetrisLoop(ctx, ts) {
     gl.vertexAttribDivisor(aOffsetLoc, 1);
     gl.bindBuffer(gl.ARRAY_BUFFER, null);
 
-    gl.clearColor(0, 0, 0, 1);
-    gl.clear(gl.COLOR_BUFFER_BIT);
-
     gl.useProgram(ctx.shader.program);
 
     const matModel = Mat4.chain(
         Mat4.scale(0.5, 0.5, 0.5),
     );
     const matView = Mat4.chain(
-        Mat4.translate(0.0, -1.0, 5.0),
-        Mat4.rotateX(-Math.PI / 16.0),
+        Mat4.translate(0.0, 0.0, 5.0),
     );
     const matProjection = Mat4.perspective({
         near: 0.01,
@@ -222,22 +239,57 @@ function tetrisLoop(ctx, ts) {
     gl.uniformMatrix4fv(ctx.shader.uniforms.get('matNormal'), false, new Float32Array(matNormal.data));
     gl.uniformMatrix4fv(ctx.shader.uniforms.get('mvp'), false, new Float32Array(mvp.data));
     gl.uniform3f(ctx.shader.uniforms.get('color'), ...[0.9, 0.7, 0.1]);
-    gl.drawArraysInstanced(gl.TRIANGLES, 0, ctx.mesh.model.faces.length * 3, blocks.length);
+    gl.drawArraysInstanced(gl.TRIANGLES, 0, ctx.blockMesh.model.faces.length * 3, blocks.length);
+
+    gl.bindVertexArray(null);
+}
+
+/**
+ * @typedef {Object} TetrisContext
+ * @property {WebGL2RenderingContext} gl
+ * @property {Tetris} tetris
+ * @property {utils.Shader} shader
+ * @property {Mesh} blockMesh
+ * @property {Mesh} tetris2000Mesh
+ * @property {number} offsetBuffer
+ *
+ * @param {TetrisContext} ctx
+ * @param {DOMHighResTimeStamp} ts
+ */
+function tetrisLoop(ctx, ts) {
+    const gl = ctx.gl;
+
+    const res = updateGame(ctx.tetris, ts);
+    console.log(res.board);
+
+    gl.clearColor(0, 0, 0, 1);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+    if (res.paused) {
+        drawIntro(ctx, ts);
+    } else {
+        drawInGame(ctx, res);
+    }
 }
 
 /**
  * @typedef {Object} Mesh
  * @property {parseObj.Model} model
+ * @property {number} vao
  *
  * @param {WebGL2RenderingContext} gl
  * @param {utils.ShaderAttrs} attrs
  * @param {string} objText
  * @returns {Mesh}
  */
-function loadMinoBlock(gl, attrs, objText) {
+function loadMesh(gl, attrs, objText) {
     const model = parseObj.parseObj(objText);
     const vertices = model.faces.flatMap((face) => face.flatMap((fv) => model.vertices[fv.vertex - 1]));
     const normals = model.faces.flatMap((face) => face.flatMap((fv) => model.normals[fv.normal - 1]));
+
+    const vao = gl.createVertexArray();
+    console.assert(vao != null);
+    gl.bindVertexArray(vao);
 
     const vertexBuffer = gl.createBuffer();
     console.assert(vertexBuffer != null);
@@ -261,7 +313,9 @@ function loadMinoBlock(gl, attrs, objText) {
 
     gl.bindBuffer(gl.ARRAY_BUFFER, null);
 
-    return { model };
+    gl.bindVertexArray(null);
+
+    return { model, vao };
 }
 
 /**
@@ -273,23 +327,37 @@ export async function initTetris(canvas) {
     gl.enable(gl.DEPTH_TEST);
     // gl.enable(gl.CULL_FACE);
 
-    const vertSource = await utils.loadTextFromUrl('/demos/resources/tetris.vert');
-    const fragSource = await utils.loadTextFromUrl('/demos/resources/tetris.frag');
-    const shader = utils.loadShader(gl,
+    const modelVertSource = await utils.loadTextFromUrl('/demos/resources/tetris-model.vert');
+    const modelFragSource = await utils.loadTextFromUrl('/demos/resources/tetris-model.frag');
+    const modelShader = utils.loadShader(gl,
         [
-            [gl.VERTEX_SHADER, vertSource],
-            [gl.FRAGMENT_SHADER, fragSource],
+            [gl.VERTEX_SHADER, modelVertSource],
+            [gl.FRAGMENT_SHADER, modelFragSource],
         ],
         ['aVertex', 'aNormal', 'aOffset'],
         ['matNormal', 'mvp', 'color']
     );
 
     const blockObj = await utils.loadTextFromUrl('/demos/resources/tetromino-block.obj');
-    const mesh = loadMinoBlock(gl, shader.attributes, blockObj);
+    const tetris2000Obj = await utils.loadTextFromUrl('/demos/resources/tetris2000.obj');
+    const blockMesh = loadMesh(gl, modelShader.attributes, blockObj);
+    const tetris2000Mesh = loadMesh(gl, modelShader.attributes, tetris2000Obj);
 
     const offsetBuffer = gl.createBuffer();
 
+    gl.bindVertexArray(tetris2000Mesh.vao);
+
+    gl.bindVertexArray(null);
+
     const tetris = await setupGame(canvas);
-    const context = { gl, tetris, shader, mesh, offsetBuffer };
+    const context = {
+        gl,
+        shader: modelShader,
+        offsetBuffer,
+        blockMesh,
+        tetris2000Mesh,
+
+        tetris,
+    };
     utils.requestAnimationFrame(context, tetrisLoop);
 }
