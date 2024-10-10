@@ -213,8 +213,8 @@ export class Mat4 {
         const {near, far, width, height} = cfg;
 
         // properly scale depth to ndc with w value
-        const c1 = (far + near) / (far - near);
-        const c2 = (2 * far * near) / (far - near);
+        const c1 = (far + near) / (near - far);
+        const c2 = (2 * far * near) / (near - far);
 
         // scale x and y to screen ratio
         let sx = 1.0;
@@ -228,8 +228,8 @@ export class Mat4 {
         return new Matrix(4, [
             sx, 0, 0, 0,
             0, sy, 0, 0,
-            0, 0, c1, 1,
-            0, 0, c2, 1
+            0, 0, c1, -1,
+            0, 0, c2, 0
         ]);
     }
 

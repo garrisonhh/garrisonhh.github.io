@@ -174,10 +174,9 @@ function drawIntro(ctx, ts) {
     const matModel = Mat4.chain(
         Mat4.rotateY(Math.cos(ts * 0.001) * (0.2 * Math.PI) + (-0.5 * Math.PI)),
         Mat4.translate(0.0, -1.0, -3.0),
-        Mat4.scale(-1.0, 1.0, 1.0),
     );
     const matView = Mat4.chain(
-        Mat4.translate(0.0, 0.0, 3.0),
+        Mat4.translate(0.0, 0.0, -3.0),
     );
     const matProjection = Mat4.perspective({
         near: 0.01,
