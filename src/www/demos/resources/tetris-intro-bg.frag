@@ -109,7 +109,10 @@ float noise(vec2 pos, vec2 kernelSize) {
 /* ========================================================================== */
 
 void main(void) {
-    vec2 coordScale = 2.0 * vec2(resolution.x / resolution.y, resolution.y / resolution.x);
+    vec2 coordScale = vec2(
+        max(1.0, resolution.x / resolution.y),
+        max(1.0, resolution.y / resolution.x)
+    );
     vec2 centeredCoord = (vTexCoord - vec2(0.5)) * coordScale;
 
     float cylAngle = atan(centeredCoord.y, centeredCoord.x);
