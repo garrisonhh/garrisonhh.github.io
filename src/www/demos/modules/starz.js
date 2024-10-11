@@ -4,16 +4,18 @@ import {Mat4} from './matrix.js';
 function backgroundLoop(ctx, ts) {
     const gl = ctx.gl;
 
+    // TODO apply projection on cpu, sort points by z value, and then use shader
+    // for color only. this will make transparency look super clean
     const starz = [
         [0.0, 0.0, 0.0],
         [1.0, 0.0, 0.0],
         [0.0, 1.0, 0.0],
-        [0.0, 0.0, 1.0],
+        [0.1, 0.1, -10.0],
     ];
 
     const matModel = Mat4.chain();
     const matView = Mat4.chain(
-        Mat4.translate(0.0, 0.0, 5.0),
+        Mat4.translate(0.0, 0.0, -5.0),
     );
     const matProjection = Mat4.perspective({
         near: 0.01,
@@ -26,11 +28,10 @@ function backgroundLoop(ctx, ts) {
     const mvp = Mat4.chain(matProjection, matView, matModel);
 
     gl.bindBuffer(gl.ARRAY_BUFFER, ctx.starzBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(starz.flat()), gl.DYNAMIC_DRAW);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(starz.flat()), gl.STREAM_DRAW);
     const aVertexLoc = ctx.shader.attributes.get('aVertex');
     gl.enableVertexAttribArray(aVertexLoc);
     gl.vertexAttribPointer(aVertexLoc, 3, gl.FLOAT, false, 0, 0);
-    gl.vertexAttribDivisor(aVertexLoc, 1);
     gl.bindBuffer(gl.ARRAY_BUFFER, null);
 
     gl.clearColor(0, 0, 0, 1);
@@ -48,11 +49,13 @@ function backgroundLoop(ctx, ts) {
 export async function initStarz(canvas) {
     const gl = utils.setupWebGLContext(canvas);
     gl.enable(gl.DEPTH_TEST);
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
     const shader = utils.loadShader(gl, [
         [gl.VERTEX_SHADER, await utils.loadTextFromUrl('/demos/resources/starz.vert')],
         [gl.FRAGMENT_SHADER, await utils.loadTextFromUrl('/demos/resources/starz.frag')],
-    ], ['aVertex'], []);
+    ], ['aVertex'], ['mvp']);
 
     const starzBuffer = gl.createBuffer();
     console.assert(starzBuffer != null);
