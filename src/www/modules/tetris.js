@@ -1,5 +1,5 @@
 import * as utils from './utils.js';
-import { Mat4 } from './matrix.js';
+import { Matrix, Mat4 } from './matrix.js';
 import * as parseObj from './parseObj.js';
 import * as oklab from './oklab.js';
 import * as runtime from './tetris/runtime.js';
@@ -43,6 +43,7 @@ function drawIntro(ctx, ts) {
     const matView = Mat4.chain(
         Mat4.translate(0.0, 0.0, -3.0),
     );
+    const matModelView = matView.mul(matModel);
     const matProjection = Mat4.perspective({
         near: 0.01,
         far: 100.0,
@@ -50,8 +51,10 @@ function drawIntro(ctx, ts) {
         height: gl.canvas.height,
     });
 
-    const matNormal = Mat4.invert(matView.mul(matModel)).transpose();
-    const mvp = Mat4.chain(matProjection, matView, matModel);
+    const matNormal = Mat4.invert(matModelView).transpose();
+    const mvp = matProjection.mul(matModelView);
+
+    const lightPos = Mat4.apply(matView, [0.0, 0.0, -10.0]);
 
     gl.useProgram(ctx.modelShader.program);
     gl.bindVertexArray(ctx.tetris2000Mesh.vao);
@@ -59,7 +62,7 @@ function drawIntro(ctx, ts) {
     gl.uniformMatrix4fv(ctx.modelShader.uniforms.get('matNormal'), false, new Float32Array(matNormal.data));
     gl.uniformMatrix4fv(ctx.modelShader.uniforms.get('mvp'), false, new Float32Array(mvp.data));
     gl.uniform3f(ctx.modelShader.uniforms.get('color'), ...tetris2000Color);
-    gl.uniform3f(ctx.modelShader.uniforms.get('lightPos'), 0.0, 0.0, -100.0);
+    gl.uniform3f(ctx.modelShader.uniforms.get('lightPos'), ...lightPos);
     gl.drawArrays(gl.TRIANGLES, 0, ctx.tetris2000Mesh.model.faces.length * 3);
 
     gl.bindVertexArray(null);

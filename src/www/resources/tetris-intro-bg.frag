@@ -132,7 +132,7 @@ void main(void) {
     float n = pow(2.0 * gradients - 1.0, 2.0);
 
     vec3 noiseColor = mix(colorA, colorB, n);
-    noiseColor.x = pow(1.0 - cylDist, 4.0); // fade out
+    noiseColor.x = 0.5 * pow(1.0 - cylDist, 4.0); // fade out
     vec3 finalColor = srgb_from_oklab(noiseColor);
 
     fragColor = vec4(finalColor, 1.0);

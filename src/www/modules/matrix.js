@@ -1,18 +1,25 @@
 export class Matrix {
     /**
-     * @param {number} columns number of columns
-     * @param {number[]} data column-major data
+     * @param {number[][]} data
      */
-    constructor(columns, data) {
-        if (data.length % columns != 0) {
-            throw new Error(
-                `matrix elements (${data.length}) is not evenly divisible by `
-                `columns (${columns})`
-            );
-        }
+    constructor(data) {
+        const rows = data.length;
+        console.assert(data.length > 0);
+        const columns = data[0].length;
+        const sameRowLength =
+            data.map((x) => x.length == columns)
+                .reduce((a, b) => a && b);
+        console.assert(sameRowLength);
+        if (!sameRowLength) throw new Error();
 
         this.columns = columns;
-        this.data = data;
+        this.data = new Array(columns * rows).fill(0);
+
+        for (let y = 0; y < rows; ++y) {
+            for (let x = 0; x < columns; ++x) {
+                this.set(x, y, data[y][x]);
+            }
+        }
     }
 
     /**
@@ -21,7 +28,9 @@ export class Matrix {
      * @returns {Matrix}
      */
     static zeroes(columns, rows) {
-        return new Matrix(columns, new Array(columns * rows).fill(0));
+        return new Matrix(new Array(rows).fill(0).map(_ => {
+            return new Array(columns).fill(0);
+        }));
     }
 
     /** @returns {number} */
@@ -34,14 +43,14 @@ export class Matrix {
      * @param {number} col
      * @returns {number}
      */
-    get(row, col) {
+    get(col, row) {
         if (row < 0 || row >= this.rows ||
             col < 0 || col >= this.columns)
         {
-            throw new Error(`matrix coordinate (${row}, ${col}) out of bounds (${this.rows}, ${this.columns})`);
+            throw new Error(`matrix coordinate (${col}, ${row}) out of bounds (${this.columns}, ${this.rows})`);
         }
 
-        return this.data[row * this.columns + col];
+        return this.data[col * this.rows + row];
     }
 
     /**
@@ -49,23 +58,23 @@ export class Matrix {
      * @param {number} col
      * @param {number} value
      */
-    set(row, col, value) {
-        if (this.row < 0 || this.row >= this.rows ||
-            this.col < 0 || this.col >= this.columns)
+    set(col, row, value) {
+        if (row < 0 || row >= this.rows ||
+            col < 0 || col >= this.columns)
         {
-            throw new Error("matrix coordinate out of bounds");
+            throw new Error(`matrix coordinate (${col}, ${row}) out of bounds (${this.columns}, ${this.rows})`);
         }
 
-        this.data[row * this.columns + col] = value;
+        this.data[col * this.rows + row] = value;
     }
 
     /** @returns {string} */
     text() {
         let text = "";
         for (let y = 0; y < this.rows; ++y) {
-            for (let x = 0; x < this.rows; ++x) {
+            for (let x = 0; x < this.columns; ++x) {
                 if (x > 0) text += ", ";
-                text += `${this.get(y, x)}`;
+                text += `${this.get(x, y)}`;
             }
             text += "\n";
         }
@@ -101,10 +110,10 @@ export class Matrix {
 
     /** @returns {Matrix} */
     transpose() {
-        const t = new Matrix(this.rows, new Array(this.data.length));
+        const t = Matrix.zeroes(this.columns, this.rows);
         for (let col = 0; col < this.columns; ++col) {
             for (let row = 0; row < this.rows; ++row) {
-                t.set(col, row, this.get(row, col));
+                t.set(row, col, this.get(col, row));
             }
         }
         return t;
@@ -147,16 +156,16 @@ export class Matrix {
      * @returns {Matrix}
      */
     mul(other) {
-        const prod = Matrix.zeroes(this.columns, other.rows);
-        console.assert(other.columns == this.rows);
+        const prod = Matrix.zeroes(other.columns, this.rows);
+        console.assert(this.columns == other.rows);
         for (let col = 0; col < prod.columns; ++col) {
             for (let row = 0; row < prod.rows; ++row) {
                 let value = 0;
-                for (let i = 0; i < other.columns; ++i) {
-                    value += other.get(row, i) * this.get(i, col);
+                for (let i = 0; i < this.columns; ++i) {
+                    value += this.get(i, row) * other.get(col, i);
                 }
 
-                prod.set(row, col, value);
+                prod.set(col, row, value);
             }
         }
 
@@ -170,22 +179,22 @@ export class Mat4 {
      * apply a transformation to a vec3
      *
      * @param {Matrix} transform
-     * @param {Array<number, 3>} v
-     * @returns {Array<number, 3>}
+     * @param {Array<number>} v
+     * @returns {Array<number>}
      */
-    static apply(transform, v) {
-        const v4 = new Matrix(1, [...v, 1.0]);
+    static apply(transform, [x, y, z]) {
+        const v4 = new Matrix([[x], [y], [z], [1.0]]);
         const res = transform.mul(v4);
         return res.data.slice(0, 3);
     }
 
     /** @returns {Matrix} */
     static identity() {
-        return new Matrix(4, [
-            1, 0, 0, 0,
-            0, 1, 0, 0,
-            0, 0, 1, 0,
-            0, 0, 0, 1,
+        return new Matrix([
+            [1, 0, 0, 0],
+            [0, 1, 0, 0],
+            [0, 0, 1, 0],
+            [0, 0, 0, 1],
         ]);
     }
 
@@ -225,11 +234,11 @@ export class Mat4 {
             sy = width / height;
         }
 
-        return new Matrix(4, [
-            sx, 0, 0, 0,
-            0, sy, 0, 0,
-            0, 0, c1, -1,
-            0, 0, c2, 0
+        return new Matrix([
+            [sx, 0, 0, 0],
+            [0, sy, 0, 0],
+            [0, 0, c1, c2],
+            [0, 0, -1, 0],
         ]);
     }
 
@@ -240,11 +249,11 @@ export class Mat4 {
      * @returns {Matrix}
      */
     static scale(x, y, z) {
-        return new Matrix(4, [
-            x, 0, 0, 0,
-            0, y, 0, 0,
-            0, 0, z, 0,
-            0, 0, 0, 1,
+        return new Matrix([
+            [x, 0, 0, 0],
+            [0, y, 0, 0],
+            [0, 0, z, 0],
+            [0, 0, 0, 1],
         ]);
     }
 
@@ -255,11 +264,11 @@ export class Mat4 {
      * @returns {Matrix}
      */
     static translate(x, y, z) {
-        return new Matrix(4, [
-            1, 0, 0, 0,
-            0, 1, 0, 0,
-            0, 0, 1, 0,
-            x, y, z, 1,
+        return new Matrix([
+            [1, 0, 0, x],
+            [0, 1, 0, y],
+            [0, 0, 1, z],
+            [0, 0, 0, 1],
         ]);
     }
 
@@ -270,11 +279,11 @@ export class Mat4 {
     static rotateX(angle) {
         const c = Math.cos(angle);
         const s = Math.sin(angle);
-        return new Matrix(4, [
-            1, 0, 0, 0,
-            0, c, s, 0,
-            0, -s, c, 0,
-            0, 0, 0, 1,
+        return new Matrix([
+            [1, 0, 0, 0],
+            [0, c, -s, 0],
+            [0, s, c, 0],
+            [0, 0, 0, 1],
         ]);
     }
 
@@ -285,11 +294,11 @@ export class Mat4 {
     static rotateY(angle) {
         const c = Math.cos(angle);
         const s = Math.sin(angle);
-        return new Matrix(4, [
-            c, 0, s, 0,
-            0, 1, 0, 0,
-            -s, 0, c, 0,
-            0, 0, 0, 1,
+        return new Matrix([
+            [c, 0, -s, 0],
+            [0, 1, 0, 0],
+            [s, 0, c, 0],
+            [0, 0, 0, 1],
         ]);
     }
 
@@ -300,11 +309,11 @@ export class Mat4 {
     static rotateZ(angle) {
         const c = Math.cos(angle);
         const s = Math.sin(angle);
-        return new Matrix(4, [
-            c, s, 0, 0,
-            -s, c, 0, 0,
-            0, 0, 1, 0,
-            0, 0, 0, 1,
+        return new Matrix([
+            [c, -s, 0, 0],
+            [s, c, 0, 0],
+            [0, 0, 1, 0],
+            [0, 0, 0, 1],
         ]);
     }
 
@@ -314,7 +323,7 @@ export class Mat4 {
      */
     static invert(mat) {
         // translated from raymath.h, so super ugly
-        const res = new Matrix(mat.columns, new Array(mat.data.length));
+        const res = Matrix.zeroes(mat.columns, mat.rows);
 
         const b00 = mat.get(0, 0)*mat.get(1, 1) - mat.get(0, 1)*mat.get(1, 0);
         const b01 = mat.get(0, 0)*mat.get(1, 2) - mat.get(0, 2)*mat.get(1, 0);
