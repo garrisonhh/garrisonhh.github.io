@@ -2,9 +2,64 @@
  * a super stupid obj loader.
  */
 
+import { Parser } from "./parser.js";
+
+/**
+ * @param {Parser} p
+ * @returns {number}
+ */
+function expectNumber(p) {
+    const res = p.parseNumber();
+    if (res == null) {
+        throw new Error("expected number");
+    }
+    return res;
+}
+
+/**
+ * @param {Parser} p
+ * @returns {Array<number>?}
+ */
+function expectVec3(p) {
+    const v = [];
+    for (let i = 0; i < 3; ++i) {
+        p.skipSpaces();
+        v.push(expectNumber(p));
+    }
+    return v;
+}
+
+/**
+ * @param {Parser} p
+ * @returns {FaceVertex[]}
+ */
+function expectFaceVertex(p) {
+    p.skipSpaces();
+    const vertex = p.parseNumber() ?? 0;
+    if (p.next() != '/') throw new Error("expected '/'");
+    const texcoord = p.parseNumber() ?? 0;
+    if (p.next() != '/') throw new Error("expected '/'");
+    const normal = p.parseNumber() ?? 0;
+    return { vertex, texcoord, normal };
+}
+
+/**
+ * @param {Parser} p
+ * @returns {FaceVertex[]}
+ */
+function expectFace(p) {
+    const face = [];
+    for (let i = 0; i < 3; ++i) {
+        p.skipSpaces();
+        face.push(expectFaceVertex(p));
+    }
+    return face;
+}
+
 /**
  * @typedef {Object} FaceVertex
  * @property {number} vertex
+ * @property {number} texcoord
  * @property {number} normal
  *
  * @typedef {Object} Model
@@ -19,40 +74,32 @@ export function parseObj(text) {
     const normals = [];
     const faces = [];
 
-    for (const line of text.split('\n')) {
-        const values = [...line.trim().matchAll(/\S+/g)].flatMap((x) => x);
-        if (values.length == 0) continue;
-        const rest = values.slice(1);
+    const parser = new Parser(text);
 
-        switch (values[0]) {
+    while (true) {
+        parser.skipSpaces();
+        if (parser.done()) break;
+
+        const op = parser.parseSeq(Parser.matches(/\S/));
+        switch (op) {
         case '#':
         case 'o':
         case 's':
             break;
         case 'v':
-            console.assert(rest.length == 3);
-            vertices.push(rest.map(parseFloat));
+            vertices.push(expectVec3(parser));
             break;
         case 'vn':
-            console.assert(rest.length == 3);
-            normals.push(rest.map(parseFloat));
+            normals.push(expectVec3(parser));
             break;
         case 'f':
-            console.assert(rest.length == 3);
-
-            faces.push(rest.map((s) => {
-                const indices = s.split('/').map((s) => s.trim());
-                console.assert(indices.length == 3);
-
-                const vertex = parseInt(indices[0]);
-                const normal = indices[2].length > 0 ? parseInt(indices[2]) : 0
-
-                return { vertex, normal };
-            }));
+            faces.push(expectFace(parser));
             break;
         default:
-            throw new Error(`unknown obj operator: '${values[0]}'`);
+            throw new Error(`unknown obj operator: '${op}'`);
         }
+
+        parser.parseLine();
     }
 
     return { vertices, normals, faces };
