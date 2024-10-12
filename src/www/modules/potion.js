@@ -34,8 +34,8 @@ export async function initBackground(canvas) {
     const gl = setupWebGLContext(canvas);
 
     const shader = loadShader(gl, [
-        [gl.VERTEX_SHADER, await loadTextFromUrl('/demos/resources/bg.vert')],
-        [gl.FRAGMENT_SHADER, await loadTextFromUrl('/demos/resources/bg.frag')],
+        [gl.VERTEX_SHADER, await loadTextFromUrl('/resources/bg.vert')],
+        [gl.FRAGMENT_SHADER, await loadTextFromUrl('/resources/bg.frag')],
     ], ['aTexCoord'], ['timestamp', 'resolution']);
 
     const texCoordBuffer = gl.createBuffer();

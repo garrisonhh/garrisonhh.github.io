@@ -53,8 +53,8 @@ export async function initStarz(canvas) {
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
     const shader = utils.loadShader(gl, [
-        [gl.VERTEX_SHADER, await utils.loadTextFromUrl('/demos/resources/starz.vert')],
-        [gl.FRAGMENT_SHADER, await utils.loadTextFromUrl('/demos/resources/starz.frag')],
+        [gl.VERTEX_SHADER, await utils.loadTextFromUrl('/resources/starz.vert')],
+        [gl.FRAGMENT_SHADER, await utils.loadTextFromUrl('/resources/starz.frag')],
     ], ['aVertex'], ['mvp']);
 
     const starzBuffer = gl.createBuffer();
