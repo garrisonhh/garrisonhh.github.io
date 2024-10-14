@@ -1,6 +1,7 @@
 import * as utils from './utils.js';
 import { Matrix, Mat4 } from './matrix.js';
 import * as parseObj from './parseObj.js';
+import * as parseBmFont from './parseBmFont.js';
 import * as oklab from './oklab.js';
 import * as runtime from './tetris/runtime.js';
 
@@ -245,6 +246,9 @@ export async function initTetris(canvas) {
     const gl = utils.setupWebGLContext(canvas);
     gl.enable(gl.DEPTH_TEST);
     gl.enable(gl.CULL_FACE);
+
+    const fontSource = await utils.loadTextFromUrl('/resources/conthrax.fnt');
+    const bmfont = parseBmFont.parseBmFont(fontSource);
 
     const modelVertSource = await utils.loadTextFromUrl('/resources/tetris-model.vert');
     const modelFragSource = await utils.loadTextFromUrl('/resources/tetris-model.frag');

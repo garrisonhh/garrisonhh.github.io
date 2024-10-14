@@ -82,6 +82,7 @@ export function parseObj(text) {
 
         const op = parser.parseSeq(Parser.matches(/\S/));
         switch (op) {
+        case '':
         case '#':
         case 'o':
         case 's':

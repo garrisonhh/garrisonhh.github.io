@@ -91,16 +91,24 @@ export class Parser {
     parseLine() {
         const start = this.index;
         while (true) {
-            const ch = this.peek();
+            const ch = this.next();
             if (ch == null || ch == '\n') break;
-            this.advance();
         }
 
         return this.text.slice(start, this.index);
     }
 
-    skipSpaces() {
-        this.parseSeq(Parser.isSpace);
+    /**
+     * skip spaces, optionally including newline
+     *
+     * @param {boolean?} includeNewline not included by default
+     */
+    skipSpaces(includeNewline) {
+        const included = includeNewline ?? false;
+        this.parseSeq((ch) => {
+            if (ch == '\n') return included;
+            return Parser.isSpace(ch);
+        });
     }
 
     /** @returns {string} */
@@ -115,5 +123,37 @@ export class Parser {
         if (match == null) return null;
         this.advance(match[0].length);
         return parseFloat(match[0]);
+    }
+
+    /**
+     * attempt to parse a c-style string literal
+     *
+     * @returns {string?}
+     */
+    parseString() {
+        const fst = this.peek();
+        if (fst != '"') return null;
+        this.advance();
+
+        let str = "";
+
+        let esc = false;
+        while (true) {
+            const ch = this.next();
+            if (ch == null) {
+                throw new Error("unterminated string");
+            } else if (esc) {
+                esc = false;
+            } else if (ch == '\\') {
+                esc = true;
+                continue;
+            } else if (ch == '"') {
+                break;
+            }
+
+            str += ch;
+        }
+
+        return str;
     }
 }
