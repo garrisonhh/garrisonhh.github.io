@@ -1,4 +1,5 @@
 const std = @import("std");
+const la = @import("linalg.zig");
 
 /// utility function when an error should crash
 pub fn must(x: anytype) t: {
@@ -16,15 +17,30 @@ pub fn must(x: anytype) t: {
 }
 
 pub const BackgroundShader = enum(u32) { _ };
+pub const Mesh = enum(u32) { _ };
 
 const env = struct {
+    extern fn getResolution(out: *[2]f32) void;
+
     extern fn print(ptr: [*]const u8, len: usize) void;
 
     extern fn loadBackground(frag_source: [*]const u8, frag_len: usize) i32;
-    extern fn drawBackground(shader: BackgroundShader) void;
+    extern fn drawBackground(shader: BackgroundShader, ts: f32) void;
 
-    // extern fn loadMesh(obj_source: [*]const u8, obj_len: usize) i32;
+    extern fn loadMesh(obj_source: [*]const u8, obj_len: usize) i32;
+    extern fn drawMesh(
+        mesh: Mesh,
+        matNormal: *const [16]f32,
+        mvp: *const [16]f32,
+        color: *const [3]f32,
+    ) void;
 };
+
+pub fn getResolution() [2]f32 {
+    var out: [2]f32 = undefined;
+    env.getResolution(&out);
+    return out;
+}
 
 /// debug print to browser console
 pub fn print(comptime fmt: []const u8, args: anytype) void {
@@ -46,6 +62,18 @@ pub fn loadBackground(frag: []const u8) LoadShaderError!BackgroundShader {
     return @enumFromInt(res);
 }
 
-pub fn drawBackground(shader: BackgroundShader) void {
-    env.drawBackground(shader);
+pub fn drawBackground(shader: BackgroundShader, ts: f32) void {
+    env.drawBackground(shader, ts);
+}
+
+pub const LoadMeshError = error{LoadMeshFailure};
+
+pub fn loadMesh(obj: []const u8) LoadMeshError!Mesh {
+    const res = env.loadMesh(obj.ptr, obj.len);
+    if (res < 0) return error.LoadMeshFailure;
+    return @enumFromInt(res);
+}
+
+pub fn drawMesh(mesh: Mesh, matNormal: la.Mat4, mvp: la.Mat4, color: la.Vec3) void {
+    env.drawMesh(mesh, matNormal.ptr(), mvp.ptr(), color.ptr());
 }
