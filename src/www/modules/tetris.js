@@ -1,7 +1,7 @@
 import * as utils from './utils.js';
 import { Matrix, Mat4 } from './matrix.js';
 import * as parseObj from './parseObj.js';
-import * as parseBmFont from './parseBmFont.js';
+import * as bmfont from './bmfont.js';
 import * as oklab from './oklab.js';
 import * as runtime from './tetris/runtime.js';
 
@@ -11,6 +11,24 @@ import * as runtime from './tetris/runtime.js';
  */
 function drawIntro(ctx, ts) {
     const gl = ctx.gl;
+
+    const matView = Mat4.chain(
+        Mat4.translate(0.0, 0.0, -1.0),
+    );
+    const matProjection = Mat4.perspective({
+        near: 0.01,
+        far: 100.0,
+        width: gl.canvas.width,
+        height: gl.canvas.height,
+    });
+
+    const fontMvp = matProjection.mul(matView);
+
+    const tb = new bmfont.TextBatcher(gl, ctx.font);
+    tb.draw("hello", [0.0, 0.0, 0.0]);
+    tb.flush(gl, fontMvp);
+
+    throw new Error("DONE");
 
     const angleDiff = Math.PI * 2.0 / 3.0;
     const colorAngle = ts * 1e-4 * Math.PI;
@@ -34,34 +52,24 @@ function drawIntro(ctx, ts) {
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
     gl.bindVertexArray(null);
-    gl.clear(gl.DEPTH_BUFFER_BIT);
 
     // tetris2000 text
-    const matModel = Mat4.chain(
+    const matLogoModel = Mat4.chain(
         Mat4.rotateY(Math.cos(ts * 0.001) * (0.2 * Math.PI) + (-0.5 * Math.PI)),
-        Mat4.translate(0.0, -1.0, -3.0),
+        Mat4.translate(0.0, -1.0, -3.125),
     );
-    const matView = Mat4.chain(
-        Mat4.translate(0.0, 0.0, -3.0),
-    );
-    const matModelView = matView.mul(matModel);
-    const matProjection = Mat4.perspective({
-        near: 0.01,
-        far: 100.0,
-        width: gl.canvas.width,
-        height: gl.canvas.height,
-    });
+    const matLogoModelView = matView.mul(matLogoModel);
 
-    const matNormal = Mat4.invert(matModelView).transpose();
-    const mvp = matProjection.mul(matModelView);
+    const matLogoNormal = Mat4.invert(matLogoModelView).transpose();
+    const logoMvp = matProjection.mul(matLogoModelView);
 
     const lightPos = Mat4.apply(matView, [0.0, 0.0, -10.0]);
 
     gl.useProgram(ctx.modelShader.program);
     gl.bindVertexArray(ctx.tetris2000Mesh.vao);
 
-    gl.uniformMatrix4fv(ctx.modelShader.uniforms.get('matNormal'), false, new Float32Array(matNormal.data));
-    gl.uniformMatrix4fv(ctx.modelShader.uniforms.get('mvp'), false, new Float32Array(mvp.data));
+    gl.uniformMatrix4fv(ctx.modelShader.uniforms.get('matNormal'), false, new Float32Array(matLogoNormal.data));
+    gl.uniformMatrix4fv(ctx.modelShader.uniforms.get('mvp'), false, new Float32Array(logoMvp.data));
     gl.uniform3f(ctx.modelShader.uniforms.get('color'), ...tetris2000Color);
     gl.uniform3f(ctx.modelShader.uniforms.get('lightPos'), ...lightPos);
     gl.drawArrays(gl.TRIANGLES, 0, ctx.tetris2000Mesh.model.faces.length * 3);
@@ -130,6 +138,7 @@ function drawInGame(ctx, res) {
  * @typedef {Object} TetrisContext
  * @property {WebGL2RenderingContext} gl
  * @property {Tetris} tetris
+ * @property {Font} font
  * @property {utils.Shader} bgShader
  * @property {utils.Shader} modelShader
  * @property {BgMesh} bgMesh
@@ -145,7 +154,7 @@ function tetrisLoop(ctx, ts) {
 
     const res = runtime.updateGame(ctx.tetris, ts);
 
-    gl.clearColor(0, 0, 0, 1);
+    gl.clearColor(1, 0, 1, 1);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
     if (res.paused) {
@@ -246,9 +255,10 @@ export async function initTetris(canvas) {
     const gl = utils.setupWebGLContext(canvas);
     gl.enable(gl.DEPTH_TEST);
     gl.enable(gl.CULL_FACE);
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
-    const fontSource = await utils.loadTextFromUrl('/resources/conthrax.fnt');
-    const bmfont = parseBmFont.parseBmFont(fontSource);
+    const font = await bmfont.loadFont(gl, '/resources/conthrax.fnt');
 
     const modelVertSource = await utils.loadTextFromUrl('/resources/tetris-model.vert');
     const modelFragSource = await utils.loadTextFromUrl('/resources/tetris-model.frag');
@@ -286,6 +296,7 @@ export async function initTetris(canvas) {
     const tetris = await runtime.setupGame(canvas);
     const context = {
         gl,
+        font,
         bgShader,
         modelShader,
         offsetBuffer,

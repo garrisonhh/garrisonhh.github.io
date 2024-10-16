@@ -136,4 +136,5 @@ void main(void) {
     vec3 finalColor = srgb_from_oklab(noiseColor);
 
     fragColor = vec4(finalColor, 1.0);
+    gl_FragDepth = 0.999;
 }
