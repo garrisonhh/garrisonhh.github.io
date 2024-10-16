@@ -54,6 +54,7 @@ export class TextBatcher {
      * @typedef {Object} BatchChar
      * @property {string} char
      * @property {number[]} pos
+     * @property {number[]} size
      */
 
     /**
@@ -71,28 +72,49 @@ export class TextBatcher {
 
     /**
      * @param {string} text
-     * @param {number[]} pos 3d position, text will be drawn towards +x
+     * @param {Matrix?} transform
      */
-    draw(text, pos) {
-        let trav = pos;
+    draw(text, transform) {
+        transform = transform ?? Mat4.identity();
+        const textSize = this.font.info.size;
 
+        const pen = [0, 0];
+        let lastChar = null;
         for (const char of text) {
             if (char == '\n') {
-                trav[0] = pos[0];
-                trav[1] += this.font.common.lineHeight;
+                pen[0] = pixelPos[0];
+                pen[1] -= this.font.common.lineHeight;
+                lastChar = null;
                 continue;
             }
 
             const charInfo = this.font.getChar(char);
-            const dst = [
-                trav[0] + charInfo.data.xoffset,
-                trav[1] + charInfo.data.yoffset,
-                trav[2],
+            const pixelPos = [
+                pen[0] + charInfo.data.xoffset,
+                pen[1] + this.font.common.base - charInfo.data.yoffset,
             ];
 
-            this.batch.push({ char, pos: dst });
+            if (lastChar != null) {
+                const kerning = this.font.getKerning(lastChar, char);
+                if (kerning !== undefined) {
+                    pixelPos[0] += kerning;
+                }
+            }
 
-            trav[0] += charInfo.data.xadvance;
+            const pos = Mat4.apply(transform, [
+                pixelPos[0] / textSize,
+                pixelPos[1] / textSize,
+                0.0,
+            ]);
+            const size = [
+                charInfo.data.width / textSize,
+                charInfo.data.height / textSize,
+            ];
+
+            this.batch.push({ char, pos, size });
+
+            pen[0] += charInfo.data.xadvance;
+            lastChar = char;
         }
     }
 
@@ -103,24 +125,39 @@ export class TextBatcher {
     flush(gl, mvp) {
         const shader = this.font.shader;
 
-        const vertices = [
-            0.0, 0.0, 0.0,
-            1.0, 0.0, 0.0,
-            0.0, 1.0, 0.0,
-            1.0, 1.0, 0.0,
+        const square = [
+            [0.0, 1.0],
+            [1.0, 1.0],
+            [0.0, 0.0],
+            [1.0, 0.0],
+            [0.0, 0.0],
+            [1.0, 1.0],
         ];
-        const texcoords = [
-            0.0, 1.0,
-            1.0, 1.0,
-            0.0, 0.0,
-            1.0, 0.0,
-        ];
+
+        const instanceCount = this.batch.length;
+        const vertices = [];
+        const texcoords = [];
+        for (const { char, pos, size } of this.batch) {
+            const info = this.font.getChar(char);
+            const [x, y, w, h] = info.rect;
+
+            for (const v of square) {
+                vertices.push(
+                    (pos[0] + v[0] * size[0]),
+                    (pos[1] - v[1] * size[1]),
+                    (pos[2])
+                );
+                texcoords.push(x + w * v[0], y + h * v[1]);
+            }
+        }
+        this.batch = [];
 
         gl.bindBuffer(gl.ARRAY_BUFFER, this.vertexBuffer);
         gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STREAM_DRAW);
         const aVertexLoc = shader.attributes.get('aVertex');
         gl.enableVertexAttribArray(aVertexLoc);
         gl.vertexAttribPointer(aVertexLoc, 3, gl.FLOAT, false, 0, 0);
+        gl.vertexAttribDivisor(aVertexLoc, 0);
         gl.bindBuffer(gl.ARRAY_BUFFER, null);
 
         gl.bindBuffer(gl.ARRAY_BUFFER, this.texCoordBuffer);
@@ -128,6 +165,7 @@ export class TextBatcher {
         const aTexCoordLoc = shader.attributes.get('aTexCoord');
         gl.enableVertexAttribArray(aTexCoordLoc);
         gl.vertexAttribPointer(aTexCoordLoc, 2, gl.FLOAT, false, 0, 0);
+        gl.vertexAttribDivisor(aTexCoordLoc, 0);
         gl.bindBuffer(gl.ARRAY_BUFFER, null);
 
         gl.useProgram(shader.program);
@@ -139,7 +177,7 @@ export class TextBatcher {
 
         gl.uniformMatrix4fv(shader.uniforms.get('mvp'), false, new Float32Array(mvp.data));
 
-        gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, 1);
+        gl.drawArraysInstanced(gl.TRIANGLES, 0, vertices.length / 3, instanceCount);
     }
 }
 

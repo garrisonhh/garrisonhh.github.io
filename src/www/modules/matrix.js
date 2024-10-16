@@ -185,7 +185,7 @@ export class Mat4 {
     static apply(transform, [x, y, z]) {
         const v4 = new Matrix([[x], [y], [z], [1.0]]);
         const res = transform.mul(v4);
-        return res.data.slice(0, 3);
+        return res.data.slice(0, 3).map((x) => x / res.data[3]);
     }
 
     /** @returns {Matrix} */

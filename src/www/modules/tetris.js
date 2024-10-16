@@ -13,7 +13,7 @@ function drawIntro(ctx, ts) {
     const gl = ctx.gl;
 
     const matView = Mat4.chain(
-        Mat4.translate(0.0, 0.0, -1.0),
+        Mat4.translate(0.0, 0.0, -4.0),
     );
     const matProjection = Mat4.perspective({
         near: 0.01,
@@ -21,14 +21,6 @@ function drawIntro(ctx, ts) {
         width: gl.canvas.width,
         height: gl.canvas.height,
     });
-
-    const fontMvp = matProjection.mul(matView);
-
-    const tb = new bmfont.TextBatcher(gl, ctx.font);
-    tb.draw("hello", [0.0, 0.0, 0.0]);
-    tb.flush(gl, fontMvp);
-
-    throw new Error("DONE");
 
     const angleDiff = Math.PI * 2.0 / 3.0;
     const colorAngle = ts * 1e-4 * Math.PI;
@@ -56,7 +48,7 @@ function drawIntro(ctx, ts) {
     // tetris2000 text
     const matLogoModel = Mat4.chain(
         Mat4.rotateY(Math.cos(ts * 0.001) * (0.2 * Math.PI) + (-0.5 * Math.PI)),
-        Mat4.translate(0.0, -1.0, -3.125),
+        Mat4.translate(0.0, -1.0, -3.0),
     );
     const matLogoModelView = matView.mul(matLogoModel);
 
@@ -75,6 +67,13 @@ function drawIntro(ctx, ts) {
     gl.drawArrays(gl.TRIANGLES, 0, ctx.tetris2000Mesh.model.faces.length * 3);
 
     gl.bindVertexArray(null);
+
+    // play button
+    const fontMvp = Mat4.chain(matProjection, matView);
+
+    const tb = new bmfont.TextBatcher(gl, ctx.font);
+    tb.draw("play", Mat4.translate(-1.1, -2.25, 0.0));
+    tb.flush(gl, fontMvp);
 }
 
 /**
