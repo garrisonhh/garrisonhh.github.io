@@ -7,8 +7,8 @@ pub fn build(b: *std.Build) void {
     });
 
     const wasm = b.addExecutable(.{
-        .name = "dotcom",
-        .root_source_file = b.path("src/lib/root.zig"),
+        .name = "app",
+        .root_source_file = b.path("src/app/root.zig"),
         .target = target,
         .optimize = .ReleaseSmall,
     });
