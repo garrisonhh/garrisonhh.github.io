@@ -44,7 +44,7 @@ fn viewIntro(ts: f32, dt: f32) void {
         la.mat4.rotateY(logoRotation + -0.5 * std.math.pi),
         la.mat4.translate(0.0, -1.0, -3.125),
     });
-    const color = la.vec3(1.0, 0.0, 0.0);
+    const color = la.vec3(0.8, 0.9, 0.9);
 
     // manage flying blocks
     for (introBlocks.slice()) |*block| {

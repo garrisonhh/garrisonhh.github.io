@@ -59,16 +59,42 @@ pub fn getResolution() [2]f32 {
 pub const Input = struct {
     const Self = @This();
 
+    pub const KeyState = enum {
+        up,
+        pressed,
+        down,
+        released,
+    };
+
+    const KeypressMap = std.EnumArray(Key, KeyState);
+
     mouse_pos: [2]f32 = .{ 0, 0 },
     clicked: bool = false,
+    keystates: KeypressMap = KeypressMap.initFill(.up),
+
+    pub const Key = enum {
+        left,
+        right,
+        soft_drop,
+        hard_drop,
+    };
 
     const Event = union(enum) {
         mousemove: [2]f32,
         click: u32,
+        keydown: Key,
+        keyup: Key,
     };
 
-    fn reset(self: *Self) void {
+    fn tick(self: *Self) void {
         self.clicked = false;
+
+        for (std.enums.values(Key)) |key| {
+            self.keystates.set(key, switch (self.keystates.get(key)) {
+                .up, .released => .up,
+                .down, .pressed => .down,
+            });
+        }
     }
 
     fn on(self: *Self, event: Event) void {
@@ -81,12 +107,18 @@ pub const Input = struct {
                     self.clicked = true;
                 }
             },
+            .keydown => |key| {
+                self.keystates.set(key, .pressed);
+            },
+            .keyup => |key| {
+                self.keystates.set(key, .released);
+            },
         }
     }
 
     /// should be called every frame
     pub fn poll(self: *Self) void {
-        self.reset();
+        self.tick();
 
         var len: usize = undefined;
         const ptr = env.getEvents(&len);
@@ -103,6 +135,16 @@ pub const Input = struct {
         for (events.value) |event| {
             self.on(event);
         }
+    }
+
+    /// query state of a key
+    pub fn isKey(self: *const Self, key: Key, query: KeyState) bool {
+        const state = self.keystates.get(key);
+        return switch (query) {
+            .up => state == .up or state == .released,
+            .down => state == .down or state == .pressed,
+            .released => state == query,
+        };
     }
 };
 

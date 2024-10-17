@@ -108,7 +108,7 @@ float noise(vec2 pos, vec2 kernelSize) {
 
 void main(void) {
     float angleA = uTime * 1e-4 * PI;
-    float angleB = angleA + PI / 2.0;
+    float angleB = angleA + PI;
     vec3 colorA = 0.5 * vec3(2.0, cos(angleA), sin(angleA));
     vec3 colorB = 0.5 * vec3(2.0, cos(angleB), sin(angleB));
 

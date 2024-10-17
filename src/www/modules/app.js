@@ -23,10 +23,13 @@ const modelShaderUniforms = ['matNormal', 'mvp', 'color'];
  *
  * @typedef {number[]} MouseMoveEvent [x, y] position
  * @typedef {number} ClickEvent button number
+ * @typedef {string} KeyPressEvent key name
  *
  * @typedef {
  *     { mousemove: MouseMoveEvent } |
- *     { click: ClickEvent }
+ *     { click: ClickEvent } |
+ *     { keydown: KeyPressEvent } |
+ *     { keyup: KeyPressEvent }
  * } Event
  *
  * @type {Event[]}
@@ -35,12 +38,31 @@ let eventQueue = [];
 /** @type {FfiString | undefined} */
 let lastEventsJson = undefined;
 
+const keymap = {
+    'ArrowLeft': 'left',
+    'ArrowRight': 'right',
+    'ArrowDown': 'soft_drop',
+    'Space': 'hard_drop',
+};
+
 function addAppEventListeners() {
     addEventListener('mousemove', (ev) => {
         eventQueue.push({ mousemove: [ev.clientX, ev.clientY] });
     });
     addEventListener('click', (ev) => {
         eventQueue.push({ click: ev.button });
+    });
+    addEventListener('keydown', (ev) => {
+        const keyname = keymap[ev.code];
+        if (keyname !== undefined) {
+            eventQueue.push({ keydown: keyname });
+        }
+    });
+    addEventListener('keyup', (ev) => {
+        const keyname = keymap[ev.code];
+        if (keyname !== undefined) {
+            eventQueue.push({ keyup: keyname });
+        }
     });
 }
 
