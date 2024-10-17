@@ -10,13 +10,39 @@ const backgroundShaders = [];
 
 let backgroundVertSource = undefined;
 let backgroundVao = undefined;
-const backgroundShaderUniforms = ['uTime'];
+const backgroundShaderUniforms = ['uTime', 'uResolution'];
 
 /** @type {Model[]} */
 const models = [];
 /** @type {utils.Shader | undefined} */
 let modelShader = undefined;
 const modelShaderUniforms = ['matNormal', 'mvp', 'color'];
+
+/**
+ * events formatted in a nice way for zig to parse
+ *
+ * @typedef {number[]} MouseMoveEvent [x, y] position
+ * @typedef {number} ClickEvent button number
+ *
+ * @typedef {
+ *     { mousemove: MouseMoveEvent } |
+ *     { click: ClickEvent }
+ * } Event
+ *
+ * @type {Event[]}
+ */
+let eventQueue = [];
+/** @type {FfiString | undefined} */
+let lastEventsJson = undefined;
+
+function addAppEventListeners() {
+    addEventListener('mousemove', (ev) => {
+        eventQueue.push({ mousemove: [ev.clientX, ev.clientY] });
+    });
+    addEventListener('click', (ev) => {
+        eventQueue.push({ click: ev.button });
+    });
+}
 
 /**
  * @typedef {Object} Model
@@ -37,7 +63,6 @@ function loadModel(mesh) {
     const vao = gl.createVertexArray();
     const vertexBuffer = gl.createBuffer();
     const normalBuffer = gl.createBuffer();
-    const ebo = gl.createBuffer();
 
     gl.bindVertexArray(vao);
     gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
@@ -58,10 +83,33 @@ function loadModel(mesh) {
  * @param {number} len
  * @returns {string}
  */
-function viewString(ptr, len) {
+function readString(ptr, len) {
     const buf = new Uint8Array(instance.exports.memory.buffer, ptr, len);
     const str = new TextDecoder().decode(buf);
     return str;
+}
+
+class FfiString {
+    constructor(str) {
+        const encoded = new TextEncoder().encode(str);
+
+        this.nbytes = encoded.length;
+        this.ptr = instance.exports.runtimeAlloc(this.nbytes);
+        if (this.ptr == 0) {
+            throw new Error("OOM :(");
+        }
+
+        const dst = new Uint8ClampedArray(
+            instance.exports.memory.buffer,
+            this.ptr,
+            this.nbytes
+        );
+        dst.set(encoded);
+    }
+
+    delete() {
+        instance.exports.runtimeFree(this.ptr, this.nbytes);
+    }
 }
 
 /**
@@ -84,6 +132,16 @@ const env = {
     },
 
     /**
+     * @param {number} outLen
+     * @returns {number}
+     */
+    getEvents(outLen) {
+        const box = new Uint32Array(instance.exports.memory.buffer, outLen, 1);
+        box[0] = lastEventsJson.nbytes;
+        return lastEventsJson.ptr;
+    },
+
+    /**
      * @param {number} ptr
      * @param {number} len
      */
@@ -99,7 +157,7 @@ const env = {
      * @returns {number}
      */
     loadBackground(fragSourcePtr, fragSourceLen) {
-        const fragSource = viewString(fragSourcePtr, fragSourceLen);
+        const fragSource = readString(fragSourcePtr, fragSourceLen);
         try {
             const shader = utils.loadShader(gl, [
                 [gl.VERTEX_SHADER, backgroundVertSource],
@@ -124,9 +182,11 @@ const env = {
         gl.useProgram(shader.program);
         gl.bindVertexArray(backgroundVao);
         gl.uniform1f(shader.uniforms.get('uTime'), ts);
+        gl.uniform2f(shader.uniforms.get('uResolution'), gl.canvas.width, gl.canvas.height);
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
         gl.bindVertexArray(null);
         gl.useProgram(null);
+        gl.clear(gl.DEPTH_BUFFER_BIT);
     },
 
     /**
@@ -135,7 +195,7 @@ const env = {
      * @returns {number}
      */
     loadMesh(objSourcePtr, objSourceLen) {
-        const source = viewString(objSourcePtr, objSourceLen);
+        const source = readString(objSourcePtr, objSourceLen);
         try {
             const mesh = obj.parseObj(source);
             const model = loadModel(mesh);
@@ -183,6 +243,8 @@ export async function load(glContext, url) {
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
 
+    addAppEventListeners();
+
     // set up background rendering
     backgroundVertSource = await utils.loadTextFromUrl('/resources/background.vert');
 
@@ -225,5 +287,14 @@ export async function load(glContext, url) {
  * @param {DOMHighResTimeStamp} ts
  */
 export function loop(ts) {
+    gl.clearColor(0, 0, 0, 1);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+    lastEventsJson = new FfiString(JSON.stringify(eventQueue));
+    eventQueue = [];
+
     instance.exports.loop(ts);
+
+    lastEventsJson.delete();
+    lastEventsJson = undefined;
 }

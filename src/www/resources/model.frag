@@ -8,6 +8,11 @@ uniform vec3 color;
 out vec4 fragColor;
 
 void main(void) {
-    fragColor = vec4(color, 1.0);
-    fragColor = vec4((vNormal + 1.0) / 2.0, 1.0);
+    vec3 lightDir = vec3(0.0, 0.0, -1.0);
+    float ambient = 0.3;
+
+    float l = dot(vNormal, -lightDir);
+    l = ambient + l * (1.0 - ambient);
+
+    fragColor = vec4(color * l, 1.0);
 }

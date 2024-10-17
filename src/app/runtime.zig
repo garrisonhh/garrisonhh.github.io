@@ -1,4 +1,5 @@
 const std = @import("std");
+const Allocator = std.mem.Allocator;
 const la = @import("linalg.zig");
 
 /// utility function when an error should crash
@@ -16,11 +17,23 @@ pub fn must(x: anytype) t: {
     };
 }
 
+export fn runtimeAlloc(nbytes: usize) ?[*]u8 {
+    const slice = std.heap.wasm_allocator.alloc(u8, nbytes) catch {
+        return null;
+    };
+    return slice.ptr;
+}
+
+export fn runtimeFree(ptr: [*]const u8, nbytes: usize) void {
+    std.heap.wasm_allocator.free(ptr[0..nbytes]);
+}
+
 pub const BackgroundShader = enum(u32) { _ };
 pub const Mesh = enum(u32) { _ };
 
 const env = struct {
     extern fn getResolution(out: *[2]f32) void;
+    extern fn getEvents(len: *usize) [*]const u8;
 
     extern fn print(ptr: [*]const u8, len: usize) void;
 
@@ -41,6 +54,57 @@ pub fn getResolution() [2]f32 {
     env.getResolution(&out);
     return out;
 }
+
+/// tracks state of user input
+pub const Input = struct {
+    const Self = @This();
+
+    mouse_pos: [2]f32 = .{ 0, 0 },
+    clicked: bool = false,
+
+    const Event = union(enum) {
+        mousemove: [2]f32,
+        click: u32,
+    };
+
+    fn reset(self: *Self) void {
+        self.clicked = false;
+    }
+
+    fn on(self: *Self, event: Event) void {
+        switch (event) {
+            .mousemove => |pos| {
+                self.mouse_pos = pos;
+            },
+            .click => |button| {
+                if (button == 0) {
+                    self.clicked = true;
+                }
+            },
+        }
+    }
+
+    /// should be called every frame
+    pub fn poll(self: *Self) void {
+        self.reset();
+
+        var len: usize = undefined;
+        const ptr = env.getEvents(&len);
+        const events_json = ptr[0..len];
+
+        const events = must(std.json.parseFromSlice(
+            []const Event,
+            std.heap.wasm_allocator,
+            events_json,
+            .{},
+        ));
+        defer events.deinit();
+
+        for (events.value) |event| {
+            self.on(event);
+        }
+    }
+};
 
 /// debug print to browser console
 pub fn print(comptime fmt: []const u8, args: anytype) void {
@@ -74,6 +138,19 @@ pub fn loadMesh(obj: []const u8) LoadMeshError!Mesh {
     return @enumFromInt(res);
 }
 
-pub fn drawMesh(mesh: Mesh, matNormal: la.Mat4, mvp: la.Mat4, color: la.Vec3) void {
+pub fn drawMeshAdvanced(mesh: Mesh, matNormal: la.Mat4, mvp: la.Mat4, color: la.Vec3) void {
     env.drawMesh(mesh, matNormal.ptr(), mvp.ptr(), color.ptr());
+}
+
+pub fn drawMesh(
+    mesh: Mesh,
+    matModel: la.Mat4,
+    matView: la.Mat4,
+    matProjection: la.Mat4,
+    color: la.Vec3,
+) void {
+    const matModelView = matView.mul(la.Mat4, matModel);
+    const matNormal = la.mat4.invert(matModelView).transpose();
+    const mvp = matProjection.mul(la.Mat4, matModelView);
+    drawMeshAdvanced(mesh, matNormal, mvp, color);
 }
