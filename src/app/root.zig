@@ -18,6 +18,7 @@ const State = union(enum) {
     intro,
 };
 
+var camera: [3]f32 = .{ 0.0, 0.0, 8.0 };
 var state: State = .intro;
 var input = rt.Input{};
 
@@ -32,7 +33,7 @@ fn viewIntro(ts: f32, dt: f32) void {
     const width, const height = rt.getResolution();
 
     // general transformations
-    const matView = la.mat4.translate(0.0, 0.0, -5.0);
+    const matView = la.mat4.translate(-camera[0], -camera[1], -camera[2]);
     const matProjection = la.mat4.perspective(.{ .width = width, .height = height });
 
     const matScreenToWorld = la.mat4.invert(matProjection.mul(la.Mat4, matView));
@@ -57,7 +58,7 @@ fn viewIntro(ts: f32, dt: f32) void {
 
         const pos = la.mat4.apply(
             matScreenToWorld,
-            la.vec3(screen_x, screen_y, -1.0),
+            la.vec3(screen_x, screen_y, -camera[2]),
         );
 
         const block = IntroBlock{
@@ -76,11 +77,13 @@ fn viewIntro(ts: f32, dt: f32) void {
     rt.drawMesh(logoModel, matLogoModel, matView, matProjection, color);
 
     for (introBlocks.slice()) |block| {
+        const scale = 0.4;
         const matBlockModel = la.Mat4.chain(&.{
             la.mat4.translate(block.pos[0], block.pos[1], block.pos[2]),
             la.mat4.rotateZ(block.rot * 1e-4),
             la.mat4.rotateX(block.rot * 5e-4),
             la.mat4.rotateY(block.rot * 1e-3),
+            la.mat4.scale(scale, scale, scale),
         });
 
         rt.drawMesh(
