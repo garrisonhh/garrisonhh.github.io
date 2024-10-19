@@ -2,6 +2,17 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const la = @import("linalg.zig");
 
+export fn runtimeAlloc(nbytes: usize) ?[*]u8 {
+    const slice = std.heap.wasm_allocator.alloc(u8, nbytes) catch {
+        return null;
+    };
+    return slice.ptr;
+}
+
+export fn runtimeFree(ptr: [*]const u8, nbytes: usize) void {
+    std.heap.wasm_allocator.free(ptr[0..nbytes]);
+}
+
 /// utility function when an error should crash
 pub fn must(x: anytype) t: {
     const T = @TypeOf(x);
@@ -15,17 +26,6 @@ pub fn must(x: anytype) t: {
         print("error: {s}", .{@errorName(e)});
         unreachable;
     };
-}
-
-export fn runtimeAlloc(nbytes: usize) ?[*]u8 {
-    const slice = std.heap.wasm_allocator.alloc(u8, nbytes) catch {
-        return null;
-    };
-    return slice.ptr;
-}
-
-export fn runtimeFree(ptr: [*]const u8, nbytes: usize) void {
-    std.heap.wasm_allocator.free(ptr[0..nbytes]);
 }
 
 pub const BackgroundShader = enum(u32) { _ };
@@ -47,6 +47,9 @@ const env = struct {
         mvp: *const [16]f32,
         color: *const [3]f32,
     ) void;
+
+    extern fn addBatchedText(text: [*]const u8, text_len: usize, mvp: *const [16]f32) void;
+    extern fn drawBatchedText() void;
 };
 
 pub fn getResolution() [2]f32 {
@@ -195,4 +198,12 @@ pub fn drawMesh(
     const matNormal = la.mat4.invert(matModelView).transpose();
     const mvp = matProjection.mul(la.Mat4, matModelView);
     drawMeshAdvanced(mesh, matNormal, mvp, color);
+}
+
+pub fn addBatchedText(text: []const u8, mvp: la.Mat4) void {
+    env.addBatchedText(text.ptr, text.len, mvp.ptr());
+}
+
+pub fn drawBatchedText() void {
+    env.drawBatchedText();
 }

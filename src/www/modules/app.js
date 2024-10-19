@@ -1,5 +1,6 @@
 import * as utils from './utils.js';
 import * as obj from './obj.js';
+import * as bmfont from './bmfont.js';
 
 /** @type {WebGL2RenderingContext | undefined} */
 let gl = undefined;
@@ -17,6 +18,20 @@ const models = [];
 /** @type {utils.Shader | undefined} */
 let modelShader = undefined;
 const modelShaderUniforms = ['matNormal', 'mvp', 'color'];
+
+/**
+ * @typedef {Object} BatchedText
+ * @property {string} text
+ * @property {Float32Array} mvp
+ */
+
+/** @type {bmfont.Font | undefined} */
+let font = undefined;
+let fontVao = -1;
+let fontVertexBuffer = -1;
+let fontTexCoordBuffer = -1;
+/** @type {BatchedText[]} */
+let fontBatch = [];
 
 /**
  * events formatted in a nice way for zig to parse
@@ -233,14 +248,14 @@ const env = {
     /**
      * @param {number} id
      * @param {number} matNormal pointer to mat4 data
-     * @param {number} mvp pointer to mat4 data
-     * @param {number} color pointer to vec3 data
+     * @param {number} mvpPtr pointer to mat4 data
+     * @param {number} colorPtr pointer to vec3 data
      */
-    drawMesh(id, matNormal, mvp, color) {
+    drawMesh(id, matNormalPtr, mvpPtr, colorPtr) {
         const model = models[id];
-        matNormal = viewFloat32Array(matNormal, 16);
-        mvp = viewFloat32Array(mvp, 16);
-        color = viewFloat32Array(color, 3);
+        const matNormal = viewFloat32Array(matNormalPtr, 16);
+        const mvp = viewFloat32Array(mvpPtr, 16);
+        const color = viewFloat32Array(colorPtr, 3);
 
         gl.useProgram(modelShader.program);
         gl.bindVertexArray(model.vao);
@@ -250,6 +265,99 @@ const env = {
         gl.drawArrays(gl.TRIANGLES, 0, model.count);
         gl.bindVertexArray(null);
         gl.useProgram(null);
+    },
+
+    /**
+     * @param {number} textPtr
+     * @param {number} textLen
+     * @param {number} mvpPtr
+     */
+    addBatchedText(textPtr, textLen, mvpPtr) {
+        const text = readString(textPtr, textLen);
+        const mvp = new Float32Array([...viewFloat32Array(mvpPtr, 16)]);
+
+        fontBatch.push({ text, mvp });
+    },
+
+    drawBatchedText() {
+        const square = [
+            [0.0, 1.0],
+            [0.0, 0.0],
+            [1.0, 1.0],
+            [0.0, 0.0],
+            [1.0, 1.0],
+            [1.0, 0.0],
+        ];
+
+        const cullFace = gl.isEnabled(gl.CULL_FACE);
+        if (cullFace) gl.disable(gl.CULL_FACE);
+        gl.useProgram(font.shader.program);
+        gl.bindVertexArray(fontVao);
+
+        // TODO multi page support will probably be necessary at some point
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, font.pageTextures[0]);
+        gl.uniform1i(font.shader.uniforms.get('fontPage'), 0);
+
+        for (const item of fontBatch) {
+            const vertices = [];
+            const texcoords = [];
+            // track pos in text coordinates
+            const pen = [0, 0];
+            const fontScale = [
+                1.0 / font.info.size,
+                1.0 / font.info.size,
+            ];
+
+            for (const ch of item.text) {
+                const chInfo = font.getChar(ch);
+
+                // add vertices + texcoords
+                vertices.push(...square.flatMap(([tx, ty]) => {
+                    // compute pen coords
+                    const [px, py] = pen;
+                    const [globalx, globaly] = [
+                        px + chInfo.data.xoffset,
+                        py + chInfo.data.yoffset,
+                    ];
+                    const [sizex, sizey] = [
+                        chInfo.data.width,
+                        chInfo.data.height,
+                    ];
+
+                    // translate to model coordinates
+                    return [
+                        (globalx + sizex * tx) * fontScale[0],
+                        -(globaly + sizey * ty) * fontScale[1],
+                    ];
+                }));
+                texcoords.push(...square.flatMap(([x, y]) => {
+                    return [
+                        chInfo.rect[0] + chInfo.rect[2] * x,
+                        chInfo.rect[1] + chInfo.rect[3] * y,
+                    ];
+                }));
+
+                pen[0] += chInfo.data.xadvance;
+            }
+
+            gl.bindBuffer(gl.ARRAY_BUFFER, fontVertexBuffer);
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STREAM_DRAW);
+            gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+            gl.bindBuffer(gl.ARRAY_BUFFER, fontTexCoordBuffer);
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(texcoords), gl.STREAM_DRAW);
+            gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 0, 0);
+            gl.bindBuffer(gl.ARRAY_BUFFER, null);
+
+            gl.uniformMatrix4fv(font.shader.uniforms.get('mvp'), false, item.mvp);
+            gl.drawArrays(gl.TRIANGLES, 0, vertices.length / 2);
+        };
+
+        gl.bindVertexArray(null);
+        gl.useProgram(null);
+        if (cullFace) gl.enable(gl.CULL_FACE);
+
+        fontBatch = [];
     },
 };
 
@@ -290,6 +398,17 @@ export async function load(glContext, url) {
         [gl.VERTEX_SHADER, await utils.loadTextFromUrl('/resources/model.vert')],
         [gl.FRAGMENT_SHADER, await utils.loadTextFromUrl('/resources/model.frag')],
     ], [], modelShaderUniforms);
+
+    // set up font rendering
+    font = await bmfont.loadFont(gl, '/resources/conthrax.fnt');
+    fontVao = gl.createVertexArray();
+    fontVertexBuffer = gl.createBuffer();
+    fontTexCoordBuffer = gl.createBuffer();
+
+    gl.bindVertexArray(fontVao);
+    gl.enableVertexAttribArray(0);
+    gl.enableVertexAttribArray(1);
+    gl.bindVertexArray(null);
 
     // set up wasm
     const memory = new WebAssembly.Memory({

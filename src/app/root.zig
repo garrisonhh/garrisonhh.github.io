@@ -14,8 +14,9 @@ export fn init() void {
     blockModel = rt.must(rt.loadMesh(@embedFile("models/tetromino-block.obj")));
 }
 
-const State = union(enum) {
+const State = enum {
     intro,
+    ingame,
 };
 
 var camera: [3]f32 = .{ 0.0, 0.0, 8.0 };
@@ -94,6 +95,16 @@ fn viewIntro(ts: f32, dt: f32) void {
             la.vec3(0.0, 1.0, 1.0),
         );
     }
+
+    const testTextMvp = la.Mat4.chain(&.{
+        matProjection,
+        matView,
+        la.mat4.translate(-1, -2 + @cos(ts * 1e-3) * 0.25, 0.0),
+        la.mat4.rotateX(-0.25 * std.math.pi),
+    });
+
+    rt.addBatchedText("play", testTextMvp);
+    rt.drawBatchedText();
 }
 
 export fn loop(ts: f32) void {
@@ -108,5 +119,6 @@ export fn loop(ts: f32) void {
 
     switch (state) {
         .intro => viewIntro(ts, dt),
+        .ingame => @panic("TODO"),
     }
 }
