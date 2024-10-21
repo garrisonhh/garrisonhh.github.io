@@ -107,10 +107,14 @@ float noise(vec2 pos, vec2 kernelSize) {
 /* ========================================================================== */
 
 void main(void) {
-    float angleA = uTime * 1e-4 * PI;
-    float angleB = angleA + PI;
-    vec3 colorA = 0.5 * vec3(2.0, cos(angleA), sin(angleA));
-    vec3 colorB = 0.5 * vec3(2.0, cos(angleB), sin(angleB));
+    float angleBase = uTime * 1e-4 * PI;
+    float angleDiff = PI / 3.0;
+    float angle0 = angleBase;
+    float angle1 = angle0 + angleDiff;
+    float angle2 = angle1 + angleDiff;
+    vec3 color0 = 0.5 * vec3(2.0, cos(angle0), sin(angle0));
+    vec3 color1 = 0.5 * vec3(2.0, cos(angle1), sin(angle1));
+    vec3 color2 = 0.5 * vec3(2.0, cos(angle2), sin(angle2));
 
     vec2 coordScale = vec2(
         max(1.0, uResolution.x / uResolution.y),
@@ -134,7 +138,7 @@ void main(void) {
     float gradients = fract(spaceNoise * 5.0);
     float n = pow(2.0 * gradients - 1.0, 2.0);
 
-    vec3 noiseColor = mix(colorA, colorB, n);
+    vec3 noiseColor = mix(mix(color0, color1, n), mix(color1, color2, n), n);
     noiseColor.x = 0.5 * pow(1.0 - cylDist, 4.0); // fade out
     vec3 finalColor = srgb_from_oklab(noiseColor);
 
