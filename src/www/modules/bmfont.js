@@ -202,6 +202,45 @@ export class Font {
         ];
         return { data, rect };
     }
+
+    /**
+     * generates `dst` coordinates scaled to range [0, 1] and `src` texture
+     * coordinates
+     *
+     * @param {string} text
+     * @yields {{ page: number; dst: number[]; src: number[]; }}
+     */
+    *typeset(text) {
+        const pen = [0, 0];
+        let lastChar = null;
+
+        for (const ch of text) {
+            const chInfo = this.getChar(ch);
+
+            if (lastChar != null) {
+                const kerning = this.getKerning(lastChar, ch);
+                if (kerning !== undefined) {
+                    pen[0] += kerning;
+                }
+            }
+
+            const dst = [
+                pen[0] + chInfo.data.xoffset,
+                pen[1] + chInfo.data.yoffset,
+                chInfo.data.width,
+                chInfo.data.height,
+            ].map((x) => x / this.info.size);
+
+            yield {
+                page: chInfo.data.page,
+                dst,
+                src: chInfo.rect,
+            };
+
+            pen[0] += chInfo.data.xadvance;
+            lastChar = ch;
+        }
+    }
 }
 
 /**
@@ -223,7 +262,7 @@ export async function loadFont(gl, path) {
     const shader = utils.loadShader(gl, [
         [gl.VERTEX_SHADER, vertSource],
         [gl.FRAGMENT_SHADER, fragSource],
-    ], [], ['mvp', 'fontPage']);
+    ], [], ['mvp', 'fontPage', 'color']);
 
     return new Font(bmfont, pageTextures, shader);
 }

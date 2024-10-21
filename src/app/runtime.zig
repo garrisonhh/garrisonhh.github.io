@@ -2,6 +2,8 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const la = @import("linalg.zig");
 
+const runtime = @This();
+
 export fn runtimeAlloc(nbytes: usize) ?[*]u8 {
     const slice = std.heap.wasm_allocator.alloc(u8, nbytes) catch {
         return null;
@@ -43,12 +45,22 @@ const env = struct {
     extern fn loadMesh(obj_source: [*]const u8, obj_len: usize) i32;
     extern fn drawMesh(
         mesh: Mesh,
-        matNormal: *const [16]f32,
+        mat_normal: *const [16]f32,
         mvp: *const [16]f32,
         color: *const [3]f32,
     ) void;
 
-    extern fn addBatchedText(text: [*]const u8, text_len: usize, mvp: *const [16]f32) void;
+    extern fn measureText(
+        text: [*]const u8,
+        text_len: usize,
+        out_rect: *[4]f32,
+    ) void;
+    extern fn addBatchedText(
+        text: [*]const u8,
+        text_len: usize,
+        mvp: *const [16]f32,
+        color: *const [3]f32,
+    ) void;
     extern fn drawBatchedText() void;
 };
 
@@ -183,27 +195,160 @@ pub fn loadMesh(obj: []const u8) LoadMeshError!Mesh {
     return @enumFromInt(res);
 }
 
-pub fn drawMeshAdvanced(mesh: Mesh, matNormal: la.Mat4, mvp: la.Mat4, color: la.Vec3) void {
-    env.drawMesh(mesh, matNormal.ptr(), mvp.ptr(), color.ptr());
+pub fn drawMeshAdvanced(mesh: Mesh, mat_normal: la.Mat4, mvp: la.Mat4, color: la.Vec3) void {
+    env.drawMesh(mesh, mat_normal.ptr(), mvp.ptr(), color.ptr());
 }
 
 pub fn drawMesh(
     mesh: Mesh,
-    matModel: la.Mat4,
-    matView: la.Mat4,
-    matProjection: la.Mat4,
+    mat_model: la.Mat4,
+    mat_view: la.Mat4,
+    mat_projection: la.Mat4,
     color: la.Vec3,
 ) void {
-    const matModelView = matView.mul(la.Mat4, matModel);
-    const matNormal = la.mat4.invert(matModelView).transpose();
-    const mvp = matProjection.mul(la.Mat4, matModelView);
-    drawMeshAdvanced(mesh, matNormal, mvp, color);
+    const mat_model_view = mat_view.mul(la.Mat4, mat_model);
+    const mat_normal = la.mat4.invert(mat_model_view).transpose();
+    const mvp = mat_projection.mul(la.Mat4, mat_model_view);
+    drawMeshAdvanced(mesh, mat_normal, mvp, color);
 }
 
-pub fn addBatchedText(text: []const u8, mvp: la.Mat4) void {
-    env.addBatchedText(text.ptr, text.len, mvp.ptr());
+pub const Rect = extern struct {
+    x: f32,
+    y: f32,
+    width: f32,
+    height: f32,
+};
+
+pub fn measureText(text: []const u8) Rect {
+    var rect: Rect = undefined;
+    env.measureText(text.ptr, text.len, @ptrCast(&rect));
+    return rect;
+}
+
+pub fn addBatchedText(text: []const u8, mvp: la.Mat4, color: la.Vec3) void {
+    env.addBatchedText(text.ptr, text.len, mvp.ptr(), color.ptr());
 }
 
 pub fn drawBatchedText() void {
     env.drawBatchedText();
 }
+
+pub const Camera = struct {
+    const Self = @This();
+
+    pos: la.Vec3,
+    target: la.Vec3,
+
+    resolution: [2]f32,
+    mat_view: la.Mat4,
+    mat_proj: la.Mat4,
+
+    /// camera must be updated after calling this!
+    pub fn init(pos: la.Vec3, target: la.Vec3) Self {
+        var self: Camera = undefined;
+        self.pos = pos;
+        self.target = target;
+
+        return self;
+    }
+
+    /// update camera to match current position, target, and runtime resolution
+    pub fn update(self: *Self) void {
+        const w, const h = getResolution();
+
+        self.resolution = .{ w, h };
+        self.mat_view = la.Mat4.chain(&.{
+            la.mat4.translate(
+                self.pos.data[0][0],
+                self.pos.data[0][1],
+                self.pos.data[0][2],
+            ),
+        });
+        self.mat_proj = la.mat4.perspective(.{ .width = w, .height = h });
+    }
+
+    pub fn computeMatNormal(self: Self, mat_model: la.Mat4) la.Mat4 {
+        const mat_model_view = self.mat_view.mul(la.Mat4, mat_model);
+        return la.mat4.invert(mat_model_view).transpose();
+    }
+
+    pub fn computeMvp(self: Self, mat_model: la.Mat4) la.Mat4 {
+        return la.Mat4.chain(&.{ self.mat_proj, self.mat_view, mat_model });
+    }
+
+    pub fn drawMesh(self: Self, mesh: Mesh, mat_model: la.Mat4, color: la.Vec3) void {
+        runtime.drawMesh(mesh, mat_model, self.mat_view, self.mat_proj, color);
+    }
+
+    pub const TextOptions = struct {
+        alignment: enum { left, center, right } = .center,
+        vert_alignment: enum { top, center, bottom } = .center,
+        color: la.Vec3 = la.vec3(1.0, 1.0, 1.0),
+    };
+
+    /// adds text with some formatting and returns rendered text rect in model
+    /// space
+    pub fn addBatchedText(
+        self: Self,
+        text: []const u8,
+        mat_model: la.Mat4,
+        opts: TextOptions,
+    ) Rect {
+        const rect = measureText(text);
+        const x_offset = switch (opts.alignment) {
+            .left => 0,
+            .center => -rect.width / 2.0,
+            .right => -rect.width,
+        };
+        const y_offset = switch (opts.vert_alignment) {
+            .top => 0,
+            .center => -rect.height / 2.0,
+            .bottom => -rect.height,
+        };
+
+        const mvp = la.Mat4.chain(&.{
+            self.mat_proj,
+            self.mat_view,
+            mat_model,
+            la.mat4.translate(x_offset - rect.x, y_offset - rect.y, 0.0),
+        });
+        runtime.addBatchedText(text, mvp, opts.color);
+
+        return Rect{
+            .x = x_offset,
+            .y = y_offset,
+            .width = rect.width,
+            .height = rect.height,
+        };
+    }
+
+    pub fn pixelRay(self: Self, pixel: [2]f32) la.Vec3 {
+        const inv_vp = la.mat4.invert(self.mat_proj.mul(la.Mat4, self.mat_view));
+
+        const screenspace_pos = la.vec4(
+            (pixel[0] / self.resolution[0]) * 2.0 - 1.0,
+            -(pixel[1] / self.resolution[1] * 2.0 - 1.0),
+            1.0,
+            1.0,
+        );
+        const dir = inv_vp.mul(la.Vec4, screenspace_pos);
+
+        return la.vec3(dir.data[0][0], dir.data[0][1], dir.data[0][2]).normalize();
+    }
+
+    /// check if pixel is within a rect on the 2d plane towards +X, +Y
+    /// useful for clicking on or hovering over text
+    pub fn pixelCollidesWithRect(
+        self: Self,
+        mat_model: la.Mat4,
+        rect: Rect,
+        pixel: [2]f32,
+    ) bool {
+        _ = self;
+        _ = rect;
+        _ = mat_model;
+        _ = pixel;
+
+        return false;
+    }
+};

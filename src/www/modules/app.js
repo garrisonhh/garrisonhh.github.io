@@ -270,13 +270,43 @@ const env = {
     /**
      * @param {number} textPtr
      * @param {number} textLen
-     * @param {number} mvpPtr
+     * @param {number} outRectPtr
      */
-    addBatchedText(textPtr, textLen, mvpPtr) {
+    measureText(textPtr, textLen, outRectPtr) {
+        const text = readString(textPtr, textLen);
+        const v = [
+            Infinity,
+            Infinity,
+            0,
+            0,
+        ];
+        for (const { dst } of font.typeset(text)) {
+            v[0] = Math.min(v[0], dst[0]);
+            v[1] = Math.min(v[1], dst[1]);
+            v[2] = Math.max(v[2], dst[0] + dst[2]);
+            v[3] = Math.max(v[3], dst[1] + dst[3]);
+        }
+
+        viewFloat32Array(outRectPtr, 4).set([
+            v[0],
+            v[1],
+            v[2] - v[0],
+            v[3] - v[1],
+        ]);
+    },
+
+    /**
+     * @param {number} textPtr
+     * @param {number} textLen
+     * @param {number} mvpPtr
+     * @param {number} colorPtr
+     */
+    addBatchedText(textPtr, textLen, mvpPtr, colorPtr) {
         const text = readString(textPtr, textLen);
         const mvp = new Float32Array([...viewFloat32Array(mvpPtr, 16)]);
+        const color = new Float32Array([...viewFloat32Array(colorPtr, 3)]);
 
-        fontBatch.push({ text, mvp });
+        fontBatch.push({ text, mvp, color });
     },
 
     drawBatchedText() {
@@ -302,43 +332,17 @@ const env = {
         for (const item of fontBatch) {
             const vertices = [];
             const texcoords = [];
-            // track pos in text coordinates
-            const pen = [0, 0];
-            const fontScale = [
-                1.0 / font.info.size,
-                1.0 / font.info.size,
-            ];
 
-            for (const ch of item.text) {
-                const chInfo = font.getChar(ch);
-
+            for (const { src, dst } of font.typeset(item.text)) {
                 // add vertices + texcoords
-                vertices.push(...square.flatMap(([tx, ty]) => {
-                    // compute pen coords
-                    const [px, py] = pen;
-                    const [globalx, globaly] = [
-                        px + chInfo.data.xoffset,
-                        py + chInfo.data.yoffset,
-                    ];
-                    const [sizex, sizey] = [
-                        chInfo.data.width,
-                        chInfo.data.height,
-                    ];
-
-                    // translate to model coordinates
-                    return [
-                        (globalx + sizex * tx) * fontScale[0],
-                        -(globaly + sizey * ty) * fontScale[1],
-                    ];
-                }));
-                texcoords.push(...square.flatMap(([x, y]) => {
-                    return [
-                        chInfo.rect[0] + chInfo.rect[2] * x,
-                        chInfo.rect[1] + chInfo.rect[3] * y,
-                    ];
-                }));
-
-                pen[0] += chInfo.data.xadvance;
+                vertices.push(...square.flatMap(([tx, ty]) => [
+                    (dst[0] + dst[2] * tx),
+                    -(dst[1] + dst[3] * ty),
+                ]));
+                texcoords.push(...square.flatMap(([x, y]) => [
+                    src[0] + src[2] * x,
+                    src[1] + src[3] * y,
+                ]));
             }
 
             gl.bindBuffer(gl.ARRAY_BUFFER, fontVertexBuffer);
@@ -350,6 +354,7 @@ const env = {
             gl.bindBuffer(gl.ARRAY_BUFFER, null);
 
             gl.uniformMatrix4fv(font.shader.uniforms.get('mvp'), false, item.mvp);
+            gl.uniform3f(font.shader.uniforms.get('color'), ...item.color);
             gl.drawArrays(gl.TRIANGLES, 0, vertices.length / 2);
         };
 

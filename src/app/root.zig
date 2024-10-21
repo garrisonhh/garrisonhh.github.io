@@ -2,16 +2,16 @@ const std = @import("std");
 const rt = @import("runtime.zig");
 const la = @import("linalg.zig");
 
-var introBg: rt.BackgroundShader = undefined;
-var lavalampBg: rt.BackgroundShader = undefined;
-var logoModel: rt.Mesh = undefined;
-var blockModel: rt.Mesh = undefined;
+var intro_bg: rt.BackgroundShader = undefined;
+var lavalamp_bg: rt.BackgroundShader = undefined;
+var logo_model: rt.Mesh = undefined;
+var block_model: rt.Mesh = undefined;
 
 export fn init() void {
-    introBg = rt.must(rt.loadBackground(@embedFile("shaders/intro-bg.frag")));
-    lavalampBg = rt.must(rt.loadBackground(@embedFile("shaders/lavalamp-bg.frag")));
-    logoModel = rt.must(rt.loadMesh(@embedFile("models/tetris2000.obj")));
-    blockModel = rt.must(rt.loadMesh(@embedFile("models/tetromino-block.obj")));
+    intro_bg = rt.must(rt.loadBackground(@embedFile("shaders/intro-bg.frag")));
+    lavalamp_bg = rt.must(rt.loadBackground(@embedFile("shaders/lavalamp-bg.frag")));
+    logo_model = rt.must(rt.loadMesh(@embedFile("models/tetris2000.obj")));
+    block_model = rt.must(rt.loadMesh(@embedFile("models/tetromino-block.obj")));
 }
 
 const State = enum {
@@ -19,7 +19,10 @@ const State = enum {
     ingame,
 };
 
-var camera: [3]f32 = .{ 0.0, 0.0, 8.0 };
+var camera = rt.Camera.init(
+    la.vec3(0.0, 0.0, -8.0),
+    la.vec3(0.0, 0.0, 0.0),
+);
 var state: State = .intro;
 var input = rt.Input{};
 
@@ -28,58 +31,55 @@ const IntroBlock = struct {
     rot: f32,
 };
 
-var introBlocks = std.BoundedArray(IntroBlock, 32){};
+var intro_blocks = std.BoundedArray(IntroBlock, 32){};
 
 fn viewIntro(ts: f32, dt: f32) void {
-    const width, const height = rt.getResolution();
-
-    // general transformations
-    const matView = la.mat4.translate(-camera[0], -camera[1], -camera[2]);
-    const matProjection = la.mat4.perspective(.{ .width = width, .height = height });
-
-    const matScreenToWorld = la.mat4.invert(matProjection.mul(la.Mat4, matView));
+    const steel_color = la.vec3(0.8, 0.9, 0.9);
 
     // logo transformations
-    const logoRotation = @cos(ts * 1e-3) * 0.25 * std.math.pi;
-    const matLogoModel = la.Mat4.chain(&.{
-        la.mat4.rotateY(logoRotation + -0.5 * std.math.pi),
+    const logo_rotation = @cos(ts * 1e-3) * 0.25 * std.math.pi;
+    const mat_logo_model = la.Mat4.chain(&.{
+        la.mat4.rotateY(logo_rotation + -0.5 * std.math.pi),
         la.mat4.translate(0.0, -1.0, -3.125),
     });
-    const color = la.vec3(0.8, 0.9, 0.9);
+
+    const mat_screen_to_world =
+        la.mat4.invert(camera.mat_proj.mul(la.Mat4, camera.mat_view));
 
     // manage flying blocks
-    for (introBlocks.slice()) |*block| {
+    for (intro_blocks.slice()) |*block| {
         block.rot += dt;
         block.pos[2] -= 1e-2 * dt;
     }
 
     if (input.clicked) {
-        const screen_x = input.mouse_pos[0] - (width / 2.0);
-        const screen_y = -input.mouse_pos[1] + (height / 2.0);
-
-        const pos = la.mat4.apply(
-            matScreenToWorld,
-            la.vec3(screen_x, screen_y, -camera[2]),
+        const screenspace_pos = la.vec4(
+            (input.mouse_pos[0] / camera.resolution[0]) * 2.0 - 1.0,
+            -(input.mouse_pos[1] / camera.resolution[1] * 2.0 - 1.0),
+            1.0,
+            1.0,
         );
 
+        const pos = mat_screen_to_world.mul(la.Vec4, screenspace_pos);
+        const final_pos = la.vec3(pos.data[0][0], pos.data[0][1], pos.data[0][2]).sub(camera.pos);
         const block = IntroBlock{
-            .pos = .{ pos.data[0][0], pos.data[0][1], pos.data[0][2] },
+            .pos = final_pos.data[0],
             .rot = dt * 1e5,
         };
 
-        if (introBlocks.len == introBlocks.capacity()) {
-            _ = introBlocks.orderedRemove(0);
+        if (intro_blocks.len == intro_blocks.capacity()) {
+            _ = intro_blocks.orderedRemove(0);
         }
-        introBlocks.appendAssumeCapacity(block);
+        intro_blocks.appendAssumeCapacity(block);
     }
 
     // draw everything
-    rt.drawBackground(introBg, ts);
-    rt.drawMesh(logoModel, matLogoModel, matView, matProjection, color);
+    rt.drawBackground(intro_bg, ts);
+    camera.drawMesh(logo_model, mat_logo_model, steel_color);
 
-    for (introBlocks.slice()) |block| {
+    for (intro_blocks.slice()) |block| {
         const scale = 0.4;
-        const matBlockModel = la.Mat4.chain(&.{
+        const mat_block_model = la.Mat4.chain(&.{
             la.mat4.translate(block.pos[0], block.pos[1], block.pos[2]),
             la.mat4.rotateZ(block.rot * 1e-4),
             la.mat4.rotateX(block.rot * 5e-4),
@@ -87,23 +87,24 @@ fn viewIntro(ts: f32, dt: f32) void {
             la.mat4.scale(scale, scale, scale),
         });
 
-        rt.drawMesh(
-            blockModel,
-            matBlockModel,
-            matView,
-            matProjection,
-            la.vec3(0.0, 1.0, 1.0),
-        );
+        camera.drawMesh(block_model, mat_block_model, la.vec3(0.0, 1.0, 1.0));
     }
 
-    const testTextMvp = la.Mat4.chain(&.{
-        matProjection,
-        matView,
-        la.mat4.translate(-1, -2 + @cos(ts * 1e-3) * 0.25, 0.0),
+    const mat_play_model = la.Mat4.chain(&.{
+        la.mat4.translate(0.0, -2 + @cos(ts * 1e-3) * 0.25, 0.0),
         la.mat4.rotateX(-0.25 * std.math.pi),
     });
 
-    rt.addBatchedText("play", testTextMvp);
+    // TODO text alignment or some kind of measuring to allow for computing alignment
+    const play_rect = camera.addBatchedText("play", mat_play_model, .{
+        .alignment = .center,
+        .vert_alignment = .center,
+        .color = steel_color,
+    });
+    if (camera.pixelCollidesWithRect(mat_play_model, play_rect, input.mouse_pos)) {
+        rt.print("COLLIDE", .{});
+    }
+
     rt.drawBatchedText();
 }
 
@@ -116,6 +117,7 @@ export fn loop(ts: f32) void {
     S.last_ts = ts;
 
     input.poll();
+    camera.update();
 
     switch (state) {
         .intro => viewIntro(ts, dt),

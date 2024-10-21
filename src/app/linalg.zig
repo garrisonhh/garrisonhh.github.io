@@ -46,6 +46,16 @@ pub fn Matrix(comptime C: comptime_int, comptime R: comptime_int) type {
             return res;
         }
 
+        pub fn sub(self: Self, other: Self) Self {
+            var res: Self = undefined;
+            for (0..C) |col| {
+                for (0..R) |row| {
+                    res.data[col][row] = self.data[col][row] - other.data[col][row];
+                }
+            }
+            return res;
+        }
+
         pub fn mul(
             self: Self,
             comptime Other: type,
@@ -93,6 +103,24 @@ pub fn Matrix(comptime C: comptime_int, comptime R: comptime_int) type {
                     res.data[row][col] = self.data[col][row];
                 }
             }
+            return res;
+        }
+
+        pub fn distance(self: Vec3, other: Vec3) f32 {
+            var sSqDiffs: f32 = 0.0;
+            for (0..3) |i| {
+                const diff = self.data[0][i] - other.data[0][i];
+                sSqDiffs += diff * diff;
+            }
+
+            return std.math.sqrt(sSqDiffs);
+        }
+
+        pub fn normalize(self: Vec3) Vec3 {
+            var sum: f32 = 0;
+            for (0..3) |i| sum += self.data[0][i];
+            var res = self;
+            for (0..3) |i| res.data[0][i] /= sum;
             return res;
         }
 
