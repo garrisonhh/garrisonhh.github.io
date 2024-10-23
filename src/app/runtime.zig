@@ -212,6 +212,12 @@ pub fn drawMesh(
     drawMeshAdvanced(mesh, mat_normal, mvp, color);
 }
 
+pub const TextOptions = struct {
+    alignment: enum { left, center, right } = .center,
+    vert_alignment: enum { top, center, bottom } = .center,
+    color: la.Vec3 = la.vec3(1.0, 1.0, 1.0),
+};
+
 pub const Rect = extern struct {
     x: f32,
     y: f32,
@@ -219,10 +225,27 @@ pub const Rect = extern struct {
     height: f32,
 };
 
-pub fn measureText(text: []const u8) Rect {
+pub fn measureText(text: []const u8, opts: TextOptions) Rect {
     var rect: Rect = undefined;
     env.measureText(text.ptr, text.len, @ptrCast(&rect));
-    return rect;
+
+    const x_offset = switch (opts.alignment) {
+        .left => 0,
+        .center => -rect.width / 2.0,
+        .right => -rect.width,
+    };
+    const y_offset = switch (opts.vert_alignment) {
+        .top => 0,
+        .center => -rect.height / 2.0,
+        .bottom => -rect.height,
+    };
+
+    return Rect{
+        .x = rect.x + x_offset,
+        .y = rect.y + y_offset,
+        .width = rect.width,
+        .height = rect.height,
+    };
 }
 
 pub fn addBatchedText(text: []const u8, mvp: la.Mat4, color: la.Vec3) void {
@@ -238,6 +261,8 @@ pub const Camera = struct {
 
     pos: la.Vec3,
     target: la.Vec3,
+    z_near: f32 = 0.01,
+    z_far: f32 = 100.0,
 
     resolution: [2]f32,
     mat_view: la.Mat4,
@@ -245,26 +270,36 @@ pub const Camera = struct {
 
     /// camera must be updated after calling this!
     pub fn init(pos: la.Vec3, target: la.Vec3) Self {
-        var self: Camera = undefined;
-        self.pos = pos;
-        self.target = target;
-
-        return self;
+        return Self{
+            .pos = pos,
+            .target = target,
+            .resolution = undefined,
+            .mat_view = undefined,
+            .mat_proj = undefined,
+        };
     }
 
     /// update camera to match current position, target, and runtime resolution
     pub fn update(self: *Self) void {
         const w, const h = getResolution();
 
+        const diff = self.pos.sub(self.target);
+        const rot_y = std.math.atan2(diff.data[0][0], diff.data[0][2]);
+        const diff2 = la.mat4.transform(la.mat4.rotateY(rot_y), self.pos).sub(self.target);
+        const rot_x = std.math.atan2(diff2.data[0][1], diff2.data[0][2]);
+
         self.resolution = .{ w, h };
         self.mat_view = la.Mat4.chain(&.{
-            la.mat4.translate(
-                self.pos.data[0][0],
-                self.pos.data[0][1],
-                self.pos.data[0][2],
-            ),
+            la.mat4.rotateY(rot_y),
+            la.mat4.rotateX(rot_x),
+            la.mat4.translate(self.pos.negate()),
         });
-        self.mat_proj = la.mat4.perspective(.{ .width = w, .height = h });
+        self.mat_proj = la.mat4.perspective(.{
+            .near = self.z_near,
+            .far = self.z_far,
+            .width = w,
+            .height = h,
+        });
     }
 
     pub fn computeMatNormal(self: Self, mat_model: la.Mat4) la.Mat4 {
@@ -280,12 +315,6 @@ pub const Camera = struct {
         runtime.drawMesh(mesh, mat_model, self.mat_view, self.mat_proj, color);
     }
 
-    pub const TextOptions = struct {
-        alignment: enum { left, center, right } = .center,
-        vert_alignment: enum { top, center, bottom } = .center,
-        color: la.Vec3 = la.vec3(1.0, 1.0, 1.0),
-    };
-
     /// adds text with some formatting and returns rendered text rect in model
     /// space
     pub fn addBatchedText(
@@ -294,46 +323,43 @@ pub const Camera = struct {
         mat_model: la.Mat4,
         opts: TextOptions,
     ) Rect {
-        const rect = measureText(text);
-        const x_offset = switch (opts.alignment) {
-            .left => 0,
-            .center => -rect.width / 2.0,
-            .right => -rect.width,
-        };
-        const y_offset = switch (opts.vert_alignment) {
-            .top => 0,
-            .center => -rect.height / 2.0,
-            .bottom => -rect.height,
-        };
+        const rect = measureText(text, opts);
 
         const mvp = la.Mat4.chain(&.{
             self.mat_proj,
             self.mat_view,
             mat_model,
-            la.mat4.translate(x_offset - rect.x, y_offset - rect.y, 0.0),
+            la.mat4.translate(la.vec3(rect.x, rect.y + rect.height, 0.0)),
         });
         runtime.addBatchedText(text, mvp, opts.color);
 
-        return Rect{
-            .x = x_offset,
-            .y = y_offset,
-            .width = rect.width,
-            .height = rect.height,
-        };
+        return rect;
     }
 
-    pub fn pixelRay(self: Self, pixel: [2]f32) la.Vec3 {
-        const inv_vp = la.mat4.invert(self.mat_proj.mul(la.Mat4, self.mat_view));
-
-        const screenspace_pos = la.vec4(
-            (pixel[0] / self.resolution[0]) * 2.0 - 1.0,
-            -(pixel[1] / self.resolution[1] * 2.0 - 1.0),
-            1.0,
+    pub fn pixelScreenspacePos(self: Self, pixel: [2]f32) la.Vec3 {
+        const screen_pos = la.vec3(
+            (pixel[0] * 2.0 / self.resolution[0] - 1.0),
+            -(pixel[1] * 2.0 / self.resolution[1] - 1.0),
             1.0,
         );
-        const dir = inv_vp.mul(la.Vec4, screenspace_pos);
 
-        return la.vec3(dir.data[0][0], dir.data[0][1], dir.data[0][2]).normalize();
+        return screen_pos;
+    }
+
+    pub fn pixelRay(self: Self, mat_model: la.Mat4, pixel: [2]f32) la.Vec3 {
+        const inv_proj = la.mat4.invert(self.mat_proj);
+        const inv_mv = la.mat4.invert(self.mat_view.mul(la.Mat4, mat_model));
+        const screen_pos = self.pixelScreenspacePos(pixel);
+        const view_dir =
+            inv_proj.mul(la.Vec4, screen_pos.expandVec(4, .{1.0}))
+            .shrinkVec(3)
+            .normalize();
+        const model_dir =
+            inv_mv.mul(la.Vec4, view_dir.expandVec(4, .{0.0}))
+            .shrinkVec(3)
+            .normalize();
+
+        return model_dir;
     }
 
     /// check if pixel is within a rect on the 2d plane towards +X, +Y
@@ -344,11 +370,17 @@ pub const Camera = struct {
         rect: Rect,
         pixel: [2]f32,
     ) bool {
-        _ = self;
-        _ = rect;
-        _ = mat_model;
-        _ = pixel;
+        const ray_dir = self.pixelRay(mat_model, pixel);
+        const ray_pos = la.mat4.transform(la.mat4.invert(mat_model), self.pos);
+        const pos = ray_pos.sub(ray_dir.mulScalar(ray_pos.data[0][2] / ray_dir.data[0][2]));
 
-        return false;
+        if (@abs(pos.data[0][2]) > 0.0001) {
+            @panic("FUCK math is broken");
+        }
+
+        const mx = pos.data[0][0];
+        const my = pos.data[0][1];
+        return mx > rect.x and mx < rect.x + rect.width and
+            my > rect.y and my < rect.y + rect.height;
     }
 };

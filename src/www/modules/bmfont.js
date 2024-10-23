@@ -215,6 +215,12 @@ export class Font {
         let lastChar = null;
 
         for (const ch of text) {
+            if (ch == '\n') {
+                pen[0] = 0;
+                pen[1] += this.common.lineHeight;
+                continue;
+            }
+
             const chInfo = this.getChar(ch);
 
             if (lastChar != null) {

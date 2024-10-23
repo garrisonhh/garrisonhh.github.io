@@ -80,6 +80,26 @@ pub fn Matrix(comptime C: comptime_int, comptime R: comptime_int) type {
             return res;
         }
 
+        pub fn mulScalar(self: Self, s: f32) Self {
+            var res: Self = undefined;
+            for (0..C) |col| {
+                for (0..R) |row| {
+                    res.data[col][row] = self.data[col][row] * s;
+                }
+            }
+            return res;
+        }
+
+        pub fn divScalar(self: Self, s: f32) Self {
+            var res: Self = undefined;
+            for (0..C) |col| {
+                for (0..R) |row| {
+                    res.data[col][row] = self.data[col][row] / s;
+                }
+            }
+            return res;
+        }
+
         /// chain multiply
         pub fn chain(matrices: []const Self) Self {
             if (comptime C != R) {
@@ -93,6 +113,16 @@ pub fn Matrix(comptime C: comptime_int, comptime R: comptime_int) type {
                 res = res.mul(Self, matrix);
             }
 
+            return res;
+        }
+
+        pub fn negate(self: Self) Self {
+            var res = self;
+            for (0..C) |col| {
+                for (0..R) |row| {
+                    res.data[col][row] = -res.data[col][row];
+                }
+            }
             return res;
         }
 
@@ -116,11 +146,43 @@ pub fn Matrix(comptime C: comptime_int, comptime R: comptime_int) type {
             return std.math.sqrt(sSqDiffs);
         }
 
-        pub fn normalize(self: Vec3) Vec3 {
+        pub fn shrinkVec(self: Self, comptime S: comptime_int) Matrix(1, S) {
+            comptime {
+                if (C != 1) {
+                    @compileError("this is not a vector");
+                } else if (S > R) {
+                    @compileError(std.fmt.comptimePrint("{} > {}", .{ S, R }));
+                }
+            }
+
+            var res: Matrix(1, S) = undefined;
+            @memcpy(&res.data[0], self.data[0][0..S]);
+            return res;
+        }
+
+        pub fn expandVec(self: Self, comptime S: comptime_int, xtra: [S - R]f32) Matrix(1, S) {
+            comptime {
+                if (C != 1) {
+                    @compileError("this is not a vector");
+                } else if (S < R) {
+                    @compileError(std.fmt.comptimePrint("{} < {}", .{ S, R }));
+                }
+            }
+
+            var res: Matrix(1, S) = undefined;
+            @memcpy(res.data[0][0..R], &self.data[0]);
+            @memcpy(res.data[0][R..], &xtra);
+            return res;
+        }
+
+        pub fn normalize(self: Matrix(1, R)) Matrix(1, R) {
             var sum: f32 = 0;
-            for (0..3) |i| sum += self.data[0][i];
-            var res = self;
-            for (0..3) |i| res.data[0][i] /= sum;
+            for (0..R) |i| sum += @abs(self.data[0][i]);
+
+            var res: Matrix(1, R) = undefined;
+            for (0..R) |i| {
+                res.data[0][i] = self.data[0][i] / sum;
+            }
             return res;
         }
 
@@ -159,16 +221,20 @@ pub fn vec4(x: f32, y: f32, z: f32, w: f32) Vec4 {
 }
 
 pub const mat4 = struct {
-    /// apply a mat4 transformation to a vec3
-    pub fn apply(transform: Mat4, v: Vec3) Vec3 {
+    pub fn project(mvp: Mat4, v: Vec3) Vec3 {
         const v4 = vec4(v.data[0][0], v.data[0][1], v.data[0][2], 1.0);
-        const homo = transform.mul(Vec4, v4);
+        const homo = mvp.mul(Vec4, v4);
         const w = homo.data[0][3];
         return vec3(
             homo.data[0][0] / w,
             homo.data[0][1] / w,
             homo.data[0][2] / w,
         );
+    }
+
+    /// equivalent to glsl: `vec3(mvp * vec4(v, 1.0))`
+    pub fn transform(mvp: Mat4, v: Vec3) Vec3 {
+        return mvp.mul(Vec4, v.expandVec(4, .{1.0})).shrinkVec(3);
     }
 
     pub fn identity() Mat4 {
@@ -241,11 +307,11 @@ pub const mat4 = struct {
         });
     }
 
-    pub fn translate(x: f32, y: f32, z: f32) Mat4 {
+    pub fn translate(v: Vec3) Mat4 {
         return Mat4.init(.{
-            .{ 1, 0, 0, x },
-            .{ 0, 1, 0, y },
-            .{ 0, 0, 1, z },
+            .{ 1, 0, 0, v.data[0][0] },
+            .{ 0, 1, 0, v.data[0][1] },
+            .{ 0, 0, 1, v.data[0][2] },
             .{ 0, 0, 0, 1 },
         });
     }
