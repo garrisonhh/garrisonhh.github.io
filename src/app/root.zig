@@ -56,8 +56,8 @@ fn viewIntro(ts: f32, dt: f32) void {
     // logo transformations
     const logo_rotation = @cos(ts * 1e-3) * 0.25 * std.math.pi;
     const mat_logo_model = la.Mat4.chain(&.{
-        la.mat4.rotateY(logo_rotation + -0.5 * std.math.pi),
-        la.mat4.translate(la.vec3(0.0, -1.0, -3.125)),
+        la.mat4.rotateY(logo_rotation),
+        la.mat4.translate(la.vec3(-3.125, -1.0, 0.0)),
     });
 
     // draw everything
