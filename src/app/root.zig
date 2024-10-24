@@ -9,13 +9,13 @@ const color = struct {
 };
 
 var intro_bg: rt.BackgroundShader = undefined;
-var lavalamp_bg: rt.BackgroundShader = undefined;
+var plaid_bg: rt.BackgroundShader = undefined;
 var logo_model: rt.Mesh = undefined;
 var block_model: rt.Mesh = undefined;
 
 export fn init() void {
     intro_bg = rt.must(rt.loadBackground(@embedFile("shaders/intro-bg.frag")));
-    lavalamp_bg = rt.must(rt.loadBackground(@embedFile("shaders/lavalamp-bg.frag")));
+    plaid_bg = rt.must(rt.loadBackground(@embedFile("shaders/plaid-bg.frag")));
     logo_model = rt.must(rt.loadMesh(@embedFile("models/tetris2000.obj")));
     block_model = rt.must(rt.loadMesh(@embedFile("models/tetromino-block.obj")));
 }
@@ -29,7 +29,7 @@ var camera = rt.Camera.init(
     la.vec3(0.0, 0.0, 8.0),
     la.vec3(0.0, 0.0, 0.0),
 );
-var state: State = .intro;
+var state: State = .ingame; // .intro;
 var input = rt.Input{};
 
 fn uiTextButton(text: []const u8, mat_model: la.Mat4) bool {
@@ -47,9 +47,7 @@ fn uiTextButton(text: []const u8, mat_model: la.Mat4) bool {
     return hovered and input.clicked;
 }
 
-fn viewIntro(ts: f32, dt: f32) void {
-    _ = dt;
-
+fn viewIntro(ts: f32) void {
     input.poll();
     camera.update();
 
@@ -69,22 +67,31 @@ fn viewIntro(ts: f32, dt: f32) void {
         la.mat4.rotateX(-0.25 * std.math.pi),
     }));
     if (clicked_play) {
-        rt.print("PLAY", .{});
+        state = .ingame;
     }
 
     rt.drawBatchedText();
 }
 
+fn viewIngame(ts: f32, dt: f32) void {
+    _ = dt;
+
+    input.poll();
+    camera.update();
+
+    rt.drawBackground(plaid_bg, ts);
+}
+
 export fn loop(ts: f32) void {
     const S = struct {
-        var last_ts: ?f32 = 0.0;
+        var last_ts: ?f32 = null;
     };
 
     const dt: f32 = if (S.last_ts) |last_ts| ts - last_ts else 0;
     S.last_ts = ts;
 
     switch (state) {
-        .intro => viewIntro(ts, dt),
-        .ingame => @panic("TODO"),
+        .intro => viewIntro(ts),
+        .ingame => viewIngame(ts, dt),
     }
 }

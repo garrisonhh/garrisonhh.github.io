@@ -76,56 +76,48 @@ vec3 mix_srgb(vec3 a, vec3 b, float x) {
 
 /* noise ==================================================================== */
 
-float hashVec2(vec2 pos) {
-    return fract(sin(dot(pos, vec2(12.9898, 78.233))) * 43758.5453);
+vec2 figure8(float x) {
+    float a = x * TAU;
+    float twist = cos(x * TAU);
+    return vec2(cos(a), sin(a) * twist);
 }
 
-float slerp(float a, float b, float x) {
-    x = clamp(x, 0.0, 1.0);
-    return a + (b - a) * ((1.0 - cos(x * PI)) / 2.0);
+float expander(vec2 coord, float period, float speed, float falloff) {
+    float d = length(coord);
+    float v = cos(d * period - uTime * speed) / (d * falloff);
+    return (v + 1.0) / 2.0;
 }
 
-float noise(vec2 pos, vec2 kernelSize) {
-    vec2 pixel = pos / kernelSize;
-    vec2 pixelFloor = floor(pixel);
+float grid(vec2 coord, float size) {
+    vec2 p = coord / size;
+    vec2 sp = sin(p * PI);
+    vec2 v = (sp / (abs(sp) + 0.2) + 1.0) / 2.0;
 
-    float a = hashVec2(pixelFloor);
-    float b = hashVec2(pixelFloor + vec2(1.0, 0.0));
-    float c = hashVec2(pixelFloor + vec2(0.0, 1.0));
-    float d = hashVec2(pixelFloor + vec2(1.0, 1.0));
-
-    vec2 pixelFract = fract(pixel);
-    float interpolated = slerp(
-        slerp(a, b, pixelFract.x),
-        slerp(c, d, pixelFract.x),
-        pixelFract.y
-    );
-
-    return interpolated;
-}
-
-/* ========================================================================== */
-
-vec3 colorGradient(float v) {
-    vec3 a = vec3(0.2, 0.195, 0.460);
-    vec3 b = vec3(0.5, 0.33, 0.047);
-    vec3 lab = mix(a, b, clamp(v, 0.0, 1.0));
-    return srgb_from_oklab(lab);
+    return (v.x + v.y * 2.0) / 3.0;
 }
 
 void main(void) {
-    vec2 pixel = vTexCoord * vec2(
+    vec2 coord = (vTexCoord * 2.0 - 1.0) * vec2(
         max(1.0, uResolution.x / uResolution.y),
         max(1.0, uResolution.y / uResolution.x)
     );
 
-    float vA = noise(pixel + vec2(uTime * 1e-5, uTime * 5e-5), vec2(0.1));
-    float vB = noise(pixel + vec2(-uTime * 1e-5, uTime * 1e-4), vec2(0.1, 0.25));
-    float value = clamp(2.0 * (vA + vB) - 1.0, 0.0, 1.0);
-    value = (1.0 - cos(value * PI)) / 2.0;
-    value = step(0.5, 1.0 - value) * (1.0 - value);
+    float tA = uTime * 1e-5;
+    vec2 pA = figure8(tA);
+    vec2 pB = figure8(tA + 1.0 / 3.0);
+    vec2 pC = figure8(tA + 2.0 / 3.0);
+    float a = expander(coord + pA, 10.0, 5e-4, 2.0);
+    float b = expander(coord + pB, 5.0, 3e-4, 3.0);
+    float c = expander(coord + pC, 15.0, 7e-4, 4.0);
+    float holez = clamp((a + b + c) / 3.0, 0.0, 1.0);
 
-    vec3 color = colorGradient(value);
+    float gridAngle = holez * TAU;
+    vec2 gridOffset = vec2(cos(gridAngle), sin(gridAngle)) * 0.3;
+    float value = grid(coord + gridOffset, 0.1);
+
+    vec3 colA = vec3(0.1, -0.1, -0.3);
+    vec3 colB = vec3(0.2, 0.2, 0.0);
+    vec3 color = srgb_from_oklab(mix(colA, colB, value));
 
     fragColor = vec4(color, 1.0);
 }
