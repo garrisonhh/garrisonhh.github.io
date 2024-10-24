@@ -1,3 +1,4 @@
+const std = @import("std");
 const la = @import("linalg.zig");
 const Vec3 = la.Vec3;
 const Mat3 = la.Matrix(3, 3);
@@ -34,15 +35,25 @@ pub fn linearSrgbFromOklab(c: Vec3) Vec3 {
 }
 
 pub fn srgbFromLinearSrgb(x: Vec3) Vec3 {
-    const xlo = x.mulScalar(12.92);
-    const xhi = x.powScalar(0.4166666666666667).mulScalar(1.055).sub(Vec3.scalar(0.055));
-    return Vec3.mix(xlo, xhi, Vec3.scalar(0.0031308).step(x));
+    var res: Vec3 = undefined;
+    for (&res.data[0], x.data[0]) |*out, value| {
+        out.* = if (value >= 0.0031308)
+            1.055 * std.math.pow(f32, value, 1.0 / 2.4) - 0.055
+        else
+            12.92 * value;
+    }
+    return res;
 }
 
 pub fn linearSrgbFromSrgb(x: Vec3) Vec3 {
-    const xlo = x.divScalar(12.92);
-    const xhi = x.add(Vec3.scalar(0.055)).divScalar(1.055).powScalar(2.4);
-    return Vec3.mix(xlo, xhi, Vec3.scalar(0.04045).step(x));
+    var res: Vec3 = undefined;
+    for (&res.data[0], x.data[0]) |*out, value| {
+        out.* = if (value >= 0.04045)
+            std.math.pow(f32, (value + 0.055) / (1.0 + 0.055), 2.4)
+        else
+            value / 12.92;
+    }
+    return res;
 }
 
 pub fn oklabFromSrgb(c: Vec3) Vec3 {

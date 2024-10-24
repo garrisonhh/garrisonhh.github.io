@@ -16,6 +16,7 @@ pub const resources = struct {
     pub var plaid_bg: rt.BackgroundShader = undefined;
     pub var logo_model: rt.Mesh = undefined;
     pub var block_model: rt.Mesh = undefined;
+    pub var container_model: rt.Mesh = undefined;
 };
 
 pub const Context = struct {
@@ -46,12 +47,14 @@ export fn init() void {
     resources.plaid_bg = rt.must(rt.loadBackground(@embedFile("shaders/plaid-bg.frag")));
     resources.logo_model = rt.must(rt.loadMesh(@embedFile("models/tetris2000.obj")));
     resources.block_model = rt.must(rt.loadMesh(@embedFile("models/tetromino-block.obj")));
+    resources.container_model = rt.must(rt.loadMesh(@embedFile("models/container.obj")));
 
     context = Context.init(la.vec3(0.0, 0.0, -10.0), la.Vec3.scalar(0.0));
 }
 
 export fn loop(ts: f32) void {
     context.input.poll();
+    context.camera.updateResolution();
     switch (context.state) {
         .intro => intro.viewIntro(&context, ts),
         .ingame => ingame.viewIngame(&context, ts),

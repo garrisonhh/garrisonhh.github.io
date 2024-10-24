@@ -301,6 +301,14 @@ pub const Camera = struct {
         };
     }
 
+    pub fn updateResolution(self: *Self) void {
+        const cur = getResolution();
+        if (cur[0] == self.resolution[0] and cur[1] == self.resolution[1]) {
+            return;
+        }
+        self.* = init(self.pos, self.target);
+    }
+
     pub fn computeMatNormal(self: Self, mat_model: la.Mat4) la.Mat4 {
         const mat_model_view = self.mat_view.mul(la.Mat4, mat_model);
         return la.mat4.invert(mat_model_view).transpose();
