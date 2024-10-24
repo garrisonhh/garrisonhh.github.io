@@ -261,45 +261,44 @@ pub const Camera = struct {
 
     pos: la.Vec3,
     target: la.Vec3,
-    z_near: f32 = 0.01,
-    z_far: f32 = 100.0,
-
+    z_near: f32,
+    z_far: f32,
     resolution: [2]f32,
     mat_view: la.Mat4,
     mat_proj: la.Mat4,
 
-    /// camera must be updated after calling this!
     pub fn init(pos: la.Vec3, target: la.Vec3) Self {
+        const z_near = 0.01;
+        const z_far = 100.0;
+        const resolution = getResolution();
+
+        // TODO fix this
+        const diff = pos.sub(target);
+        const rot_y = std.math.atan2(diff.data[0][0], diff.data[0][2]);
+        const diff2 = la.mat4.transform(la.mat4.rotateY(rot_y), pos).sub(target);
+        const rot_x = std.math.atan2(diff2.data[0][1], diff2.data[0][2]);
+
+        const mat_view = la.Mat4.chain(&.{
+            la.mat4.rotateY(rot_y),
+            la.mat4.rotateX(rot_x),
+            la.mat4.translate(pos.negate()),
+        });
+        const mat_proj = la.mat4.perspective(.{
+            .near = z_near,
+            .far = z_far,
+            .width = resolution[0],
+            .height = resolution[1],
+        });
+
         return Self{
             .pos = pos,
             .target = target,
-            .resolution = undefined,
-            .mat_view = undefined,
-            .mat_proj = undefined,
+            .z_near = z_near,
+            .z_far = z_far,
+            .resolution = resolution,
+            .mat_view = mat_view,
+            .mat_proj = mat_proj,
         };
-    }
-
-    /// update camera to match current position, target, and runtime resolution
-    pub fn update(self: *Self) void {
-        const w, const h = getResolution();
-
-        const diff = self.pos.sub(self.target);
-        const rot_y = std.math.atan2(diff.data[0][0], diff.data[0][2]);
-        const diff2 = la.mat4.transform(la.mat4.rotateY(rot_y), self.pos).sub(self.target);
-        const rot_x = std.math.atan2(diff2.data[0][1], diff2.data[0][2]);
-
-        self.resolution = .{ w, h };
-        self.mat_view = la.Mat4.chain(&.{
-            la.mat4.rotateY(rot_y),
-            la.mat4.rotateX(rot_x),
-            la.mat4.translate(self.pos.negate()),
-        });
-        self.mat_proj = la.mat4.perspective(.{
-            .near = self.z_near,
-            .far = self.z_far,
-            .width = w,
-            .height = h,
-        });
     }
 
     pub fn computeMatNormal(self: Self, mat_model: la.Mat4) la.Mat4 {
