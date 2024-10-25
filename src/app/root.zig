@@ -25,7 +25,7 @@ pub const Context = struct {
         ingame,
     };
 
-    state: State = .ingame, // .intro,
+    state: State = .ingame, // TODO .intro,
     camera: rt.Camera,
     input: rt.Input = .{},
 
@@ -49,7 +49,7 @@ export fn init() void {
     resources.block_model = rt.must(rt.loadMesh(@embedFile("models/tetromino-block.obj")));
     resources.container_model = rt.must(rt.loadMesh(@embedFile("models/container.obj")));
 
-    context = Context.init(la.vec3(0.0, 0.0, -10.0), la.Vec3.scalar(0.0));
+    context = Context.init(la.vec3(0.0, 0.0, 10.0), la.Vec3.scalar(0.0));
 }
 
 export fn loop(ts: f32) void {

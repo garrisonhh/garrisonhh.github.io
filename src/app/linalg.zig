@@ -3,6 +3,7 @@
 const std = @import("std");
 
 pub const Mat4 = Matrix(4, 4);
+pub const Vec2 = Matrix(1, 2);
 pub const Vec3 = Matrix(1, 3);
 pub const Vec4 = Matrix(1, 4);
 
@@ -272,6 +273,10 @@ pub fn Matrix(comptime C: comptime_int, comptime R: comptime_int) type {
             }
         }
     };
+}
+
+pub fn vec2(x: f32, y: f32) Vec2 {
+    return Vec2.init(.{ .{x}, .{y} });
 }
 
 pub fn vec3(x: f32, y: f32, z: f32) Vec3 {
