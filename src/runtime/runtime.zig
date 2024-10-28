@@ -4,6 +4,16 @@ const la = @import("linalg.zig");
 
 const runtime = @This();
 
+pub const Matrix = la.Matrix;
+pub const Mat4 = la.Mat4;
+pub const Vec2 = la.Vec2;
+pub const Vec3 = la.Vec3;
+pub const Vec4 = la.Vec4;
+pub const mat4 = la.mat4;
+pub const vec2 = la.vec2;
+pub const vec3 = la.vec3;
+pub const vec4 = la.vec4;
+
 export fn runtimeAlloc(nbytes: usize) ?[*]u8 {
     const slice = std.heap.wasm_allocator.alloc(u8, nbytes) catch {
         return null;

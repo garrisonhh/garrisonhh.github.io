@@ -1,7 +1,7 @@
 const std = @import("std");
-const la = @import("linalg.zig");
-const Vec3 = la.Vec3;
-const Mat3 = la.Matrix(3, 3);
+const rt = @import("runtime");
+const Vec3 = rt.Vec3;
+const Mat3 = rt.Matrix(3, 3);
 
 const fwd_a = Mat3.init(.{
     .{ 1.0, 1.0, 1.0 },

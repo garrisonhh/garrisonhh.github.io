@@ -1,14 +1,13 @@
 const std = @import("std");
-const rt = @import("runtime.zig");
-const la = @import("linalg.zig");
+const rt = @import("runtime");
 
 const intro = @import("intro.zig");
 const ingame = @import("ingame.zig");
 
 pub const color = struct {
-    pub const steel = la.vec3(0.8, 0.9, 0.9);
+    pub const steel = rt.vec3(0.8, 0.9, 0.9);
     pub const ui_text_unhovered = steel;
-    pub const ui_text_hovered = la.vec3(0.8, 0.5, 0.3);
+    pub const ui_text_hovered = rt.vec3(0.8, 0.5, 0.3);
 };
 
 pub const resources = struct {
@@ -25,17 +24,17 @@ pub const Context = struct {
         ingame,
     };
 
-    state: State = .ingame, // TODO .intro,
+    state: State = .intro,
     camera: rt.Camera,
     input: rt.Input = .{},
 
-    fn init(camera_pos: la.Vec3, camera_target: la.Vec3) Context {
+    fn init(camera_pos: rt.Vec3, camera_target: rt.Vec3) Context {
         return .{
             .camera = rt.Camera.init(camera_pos, camera_target),
         };
     }
 
-    pub fn setCamera(ctx: *Context, pos: la.Vec3, target: la.Vec3) void {
+    pub fn setCamera(ctx: *Context, pos: rt.Vec3, target: rt.Vec3) void {
         ctx.camera = rt.Camera.init(pos, target);
     }
 };
@@ -49,7 +48,7 @@ export fn init() void {
     resources.block_model = rt.must(rt.loadMesh(@embedFile("models/tetromino-block.obj")));
     resources.container_model = rt.must(rt.loadMesh(@embedFile("models/container.obj")));
 
-    context = Context.init(la.vec3(0.0, 0.0, 10.0), la.Vec3.scalar(0.0));
+    context = Context.init(rt.vec3(0.0, 0.0, 10.0), rt.Vec3.scalar(0.0));
 }
 
 export fn loop(ts: f32) void {
@@ -61,7 +60,7 @@ export fn loop(ts: f32) void {
     }
 }
 
-pub fn uiTextButton(ctx: *const Context, text: []const u8, mat_model: la.Mat4) bool {
+pub fn uiTextButton(ctx: *const Context, text: []const u8, mat_model: rt.Mat4) bool {
     var options = rt.TextOptions{
         .alignment = .center,
         .vert_alignment = .center,

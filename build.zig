@@ -5,26 +5,36 @@ pub fn build(b: *std.Build) void {
         .cpu_arch = .wasm32,
         .os_tag = .freestanding,
     });
+    const optimize = std.builtin.OptimizeMode.ReleaseSmall;
 
-    const wasm = b.addExecutable(.{
-        .name = "app",
-        .root_source_file = b.path("src/app/root.zig"),
+    const runtime = b.createModule(.{
+        .root_source_file = b.path("src/runtime/runtime.zig"),
         .target = target,
-        .optimize = .ReleaseSmall,
+        .optimize = optimize,
     });
-    wasm.rdynamic = true;
-    wasm.export_memory = true;
-    wasm.entry = .disabled;
 
-    const install_wasm = b.addInstallArtifact(wasm, .{
+    const tetris = b.addExecutable(.{
+        .name = "tetris",
+        .root_source_file = b.path("src/tetris/root.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    tetris.root_module.addImport("runtime", runtime);
+    tetris.rdynamic = true;
+    tetris.export_memory = true;
+    tetris.entry = .disabled;
+
+    const install = b.getInstallStep();
+
+    const isntall_tetris = b.addInstallArtifact(tetris, .{
         .dest_dir = .{ .override = .lib },
     });
-    b.getInstallStep().dependOn(&install_wasm.step);
+    install.dependOn(&isntall_tetris.step);
 
     const install_site = b.addInstallDirectory(.{
         .source_dir = b.path("src/www"),
         .install_dir = .prefix,
         .install_subdir = "",
     });
-    b.getInstallStep().dependOn(&install_site.step);
+    install.dependOn(&install_site.step);
 }
