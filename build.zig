@@ -1,5 +1,30 @@
 const std = @import("std");
 
+fn addApp(
+    b: *std.Build,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+    runtime: *std.Build.Module,
+    name: []const u8,
+    root: std.Build.LazyPath,
+) void {
+    const app = b.addExecutable(.{
+        .name = name,
+        .root_source_file = root,
+        .target = target,
+        .optimize = optimize,
+    });
+    app.root_module.addImport("runtime", runtime);
+    app.rdynamic = true;
+    app.export_memory = true;
+    app.entry = .disabled;
+
+    const install_app = b.addInstallArtifact(app, .{
+        .dest_dir = .{ .override = .lib },
+    });
+    b.getInstallStep().dependOn(&install_app.step);
+}
+
 pub fn build(b: *std.Build) void {
     const target = b.resolveTargetQuery(.{
         .cpu_arch = .wasm32,
@@ -13,28 +38,13 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    const tetris = b.addExecutable(.{
-        .name = "tetris",
-        .root_source_file = b.path("src/tetris/root.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    tetris.root_module.addImport("runtime", runtime);
-    tetris.rdynamic = true;
-    tetris.export_memory = true;
-    tetris.entry = .disabled;
-
-    const install = b.getInstallStep();
-
-    const isntall_tetris = b.addInstallArtifact(tetris, .{
-        .dest_dir = .{ .override = .lib },
-    });
-    install.dependOn(&isntall_tetris.step);
+    addApp(b, target, optimize, runtime, "index", b.path("src/index/root.zig"));
+    addApp(b, target, optimize, runtime, "tetris", b.path("src/tetris/root.zig"));
 
     const install_site = b.addInstallDirectory(.{
         .source_dir = b.path("src/www"),
         .install_dir = .prefix,
         .install_subdir = "",
     });
-    install.dependOn(&install_site.step);
+    b.getInstallStep().dependOn(&install_site.step);
 }

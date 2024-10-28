@@ -1,0 +1,31 @@
+<!doctype html>
+<html>
+  <head>
+    <title>tetris 2000</title>
+  </head>
+
+  <style>
+    canvas {
+      position: absolute;
+      top: 0px;
+      left: 0px;
+      width: 100vw;
+      height: 100vh;
+      margin: 0;
+    }
+  </style>
+
+  <body>
+    <canvas id="target"></canvas>
+  </body>
+
+  <script type="module">
+    import { start } from '/modules/runtime.js';
+
+    addEventListener('load', () => {
+      const canvas = document.getElementById('target');
+      console.assert(canvas != null);
+      start(canvas, '/lib/tetris.wasm');
+    });
+  </script>
+</html>

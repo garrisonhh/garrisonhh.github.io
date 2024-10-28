@@ -37,12 +37,13 @@ let fontBatch = [];
  * events formatted in a nice way for zig to parse
  *
  * @typedef {number[]} MouseMoveEvent [x, y] position
- * @typedef {number} ClickEvent button number
+ * @typedef {number} MouseEvent button number
  * @typedef {string} KeyPressEvent key name
  *
  * @typedef {
  *     { mousemove: MouseMoveEvent } |
- *     { click: ClickEvent } |
+ *     { mousedown: MouseEvent } |
+ *     { mouseup: MouseEvent } |
  *     { keydown: KeyPressEvent } |
  *     { keyup: KeyPressEvent }
  * } Event
@@ -61,11 +62,24 @@ const keymap = {
 };
 
 function addAppEventListeners() {
+    addEventListener('mousedown', (ev) => {
+        eventQueue.push({ mousedown: ev.button });
+    });
+    addEventListener('touchstart', () => {
+        eventQueue.push({ mousedown: 0 });
+    });
     addEventListener('mousemove', (ev) => {
         eventQueue.push({ mousemove: [ev.clientX, ev.clientY] });
     });
-    addEventListener('click', (ev) => {
-        eventQueue.push({ click: ev.button });
+    addEventListener('touchmove', (ev) => {
+        const touch0 = ev.touches[0];
+        eventQueue.push({ mousemove: [touch0.clientX, touch0.clientY] });
+    });
+    addEventListener('mouseup', () => {
+        eventQueue.push({ mouseup: 0 });
+    });
+    addEventListener('touchend', () => {
+        eventQueue.push({ mouseup: 0 });
     });
     addEventListener('keydown', (ev) => {
         const keyname = keymap[ev.code];

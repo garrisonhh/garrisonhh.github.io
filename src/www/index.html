@@ -1,31 +1,51 @@
 <!doctype html>
 <html>
   <head>
-    <title>tetris 2000</title>
+    <title>garrisonhh</title>
+    <link rel="stylesheet" href="/index.css">
   </head>
 
-  <style>
-    canvas {
-      position: absolute;
-      top: 0px;
-      left: 0px;
-      width: 100vw;
-      height: 100vh;
-      margin: 0;
-    }
-  </style>
-
   <body>
-    <canvas id="target"></canvas>
+    <canvas id="background"></canvas>
+    <main>
+      <div id="title">garrisonhh</div>
+      <div id="apps"></div>
+    </main>
   </body>
 
   <script type="module">
     import { start } from '/modules/runtime.js';
 
+    const apps = [
+      [ 'tetris 2000', 'tetris2000.png', '/tetris.html' ],
+    ];
+
+    function addApps() {
+      const appList = document.getElementById('apps');
+      for (const [ name, screenie, link ] of apps) {
+        const app = document.createElement('div');
+        app.classList.add('app');
+        app.addEventListener('click', () => {
+          window.location.href = link;
+        });
+
+        const img = document.createElement('img');
+        img.src = `/screenies/${screenie}`;
+        app.appendChild(img);
+
+        const label = document.createElement('div');
+        label.innerText = name;
+        app.appendChild(label);
+
+        appList.appendChild(app);
+      }
+    }
+
     addEventListener('load', () => {
-      const canvas = document.getElementById('target');
-      console.assert(canvas != null);
-      start(canvas, '/lib/tetris.wasm');
+      const canvas = document.getElementById('background');
+      start(canvas, '/lib/index.wasm');
+
+      addApps();
     });
   </script>
 </html>

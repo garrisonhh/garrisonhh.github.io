@@ -1,0 +1,72 @@
+#background {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100vw;
+    height: 100vh;
+}
+
+main {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100vw;
+    height: 100vh;
+
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    align-items: center;
+    gap: 50px;
+}
+
+#title {
+    text-align: center;
+    line-height: 50px;
+
+    width: max(320px, 50%);
+    height: 50px;
+    margin: 10px;
+
+    border-radius: 25px;
+    font-family: Verdana, Geneva, Tahoma, sans-serif;
+    font-size: 32px;
+    color: white;
+    background-color: #0000009F;
+}
+
+#apps {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-evenly;
+    align-items: center;
+
+    width: max(640px, 75%);
+}
+
+.app {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 10px;
+
+    border-radius: 10px;
+    padding: 10px;
+    background-color: #0000009F;
+
+    transition: transform ease 0.5s;
+}
+
+.app:hover {
+    transform: scale(1.1);
+}
+
+.app > img {
+    border-radius: 10px;
+}
+
+.app > div {
+    color: white;
+    font-family: 'Franklin Gothic Medium', 'Arial Narrow', Arial, sans-serif;
+}

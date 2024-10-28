@@ -95,6 +95,7 @@ pub const Input = struct {
 
     mouse_pos: [2]f32 = .{ 0, 0 },
     clicked: bool = false,
+    unclicked: bool = false,
     keystates: KeypressMap = KeypressMap.initFill(.up),
 
     pub const Key = enum {
@@ -106,13 +107,15 @@ pub const Input = struct {
 
     const Event = union(enum) {
         mousemove: [2]f32,
-        click: u32,
+        mousedown: u32,
+        mouseup: u32,
         keydown: Key,
         keyup: Key,
     };
 
     fn tick(self: *Self) void {
         self.clicked = false;
+        self.unclicked = false;
 
         for (std.enums.values(Key)) |key| {
             self.keystates.set(key, switch (self.keystates.get(key)) {
@@ -127,9 +130,14 @@ pub const Input = struct {
             .mousemove => |pos| {
                 self.mouse_pos = pos;
             },
-            .click => |button| {
+            .mousedown => |button| {
                 if (button == 0) {
                     self.clicked = true;
+                }
+            },
+            .mouseup => |button| {
+                if (button == 0) {
+                    self.unclicked = true;
                 }
             },
             .keydown => |key| {
