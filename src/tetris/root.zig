@@ -27,6 +27,7 @@ pub const Context = struct {
     state: State = .intro,
     camera: rt.Camera,
     input: rt.Input = .{},
+    tetris: ingame.Tetris = undefined,
 
     fn init(camera_pos: rt.Vec3, camera_target: rt.Vec3) Context {
         return .{
@@ -36,6 +37,11 @@ pub const Context = struct {
 
     pub fn setCamera(ctx: *Context, pos: rt.Vec3, target: rt.Vec3) void {
         ctx.camera = rt.Camera.init(pos, target);
+    }
+
+    pub fn startGame(ctx: *Context, ts: f32) void {
+        ctx.tetris = ingame.Tetris.init(ts);
+        ctx.state = .ingame;
     }
 };
 
@@ -54,6 +60,10 @@ export fn init() void {
 export fn loop(ts: f32) void {
     context.input.poll();
     context.camera.updateResolution();
+
+    // TODO testing remove
+    if (context.state == .intro) context.startGame(ts);
+
     switch (context.state) {
         .intro => intro.viewIntro(&context, ts),
         .ingame => ingame.viewIngame(&context, ts),

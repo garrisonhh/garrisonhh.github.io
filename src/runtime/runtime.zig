@@ -176,7 +176,7 @@ pub const Input = struct {
         return switch (query) {
             .up => state == .up or state == .released,
             .down => state == .down or state == .pressed,
-            .released => state == query,
+            .pressed, .released => state == query,
         };
     }
 };

@@ -22,7 +22,7 @@ pub fn viewIntro(ctx: *Context, ts: f32) void {
         rt.mat4.rotateX(-0.25 * std.math.pi),
     }));
     if (clicked_play) {
-        ctx.state = .ingame;
+        ctx.startGame(ts);
     }
 
     rt.drawBatchedText();
