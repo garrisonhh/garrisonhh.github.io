@@ -103,6 +103,8 @@ pub const Input = struct {
         right,
         soft_drop,
         hard_drop,
+        rotate_left,
+        rotate_right,
     };
 
     const Event = union(enum) {

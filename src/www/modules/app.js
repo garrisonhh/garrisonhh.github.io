@@ -59,6 +59,8 @@ const keymap = {
     'ArrowRight': 'right',
     'ArrowDown': 'soft_drop',
     'Space': 'hard_drop',
+    'KeyC': 'rotate_right',
+    'KeyX': 'rotate_left',
 };
 
 function addAppEventListeners() {
