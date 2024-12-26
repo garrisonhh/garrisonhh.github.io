@@ -61,9 +61,6 @@ export fn loop(ts: f32) void {
     context.input.poll();
     context.camera.updateResolution();
 
-    // TODO testing remove
-    if (context.state == .intro) context.startGame(ts);
-
     switch (context.state) {
         .intro => intro.viewIntro(&context, ts),
         .ingame => ingame.viewIngame(&context, ts),
