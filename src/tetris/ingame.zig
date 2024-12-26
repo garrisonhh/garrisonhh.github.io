@@ -110,6 +110,70 @@ const Tetromino = enum {
     }
 };
 
+/// tracks animation values with different linear transformations
+///
+/// all animation values start at 1.0 and end at 0.0
+const Animations = struct {
+    const Self = @This();
+
+    const max_animation_count = 1024;
+    const Key = enum(std.math.IntFittingRange(0, max_animation_count)) { _ };
+
+    const Transform = enum {
+        linear,
+        /// start quickly and finish gently
+        square,
+        /// start very quickly and finish very gently
+        quad,
+    };
+
+    const Timer = struct {
+        transform: Transform,
+        value: f32,
+        speed: f32,
+    };
+
+    values: std.BoundedArray(Timer, max_animation_count) = .{},
+
+    fn register(self: *Self, transform: Transform, speed: f32) Key {
+        std.debug.assert(speed > 0.0);
+        const index = self.values.len;
+        self.values.append(.{
+            .transform = transform,
+            .value = 0.0,
+            .speed = speed,
+        }) catch @panic("too many animations used");
+        return @enumFromInt(index);
+    }
+
+    fn throttle(self: *Self, key: Key, speed: f32) void {
+        self.values.slice()[@intFromEnum(key)].speed = speed;
+    }
+
+    fn reset(self: *Self, key: Key) void {
+        self.values.slice()[@intFromEnum(key)].value = 1.0;
+    }
+
+    fn stop(self: *Self, key: Key) void {
+        self.values.slice()[@intFromEnum(key)].value = 0.0;
+    }
+
+    fn get(self: *const Self, key: Key) f32 {
+        const timer = self.values.get(@intFromEnum(key));
+        return switch (timer.transform) {
+            .linear => timer.value,
+            .square => std.math.pow(f32, timer.value, 2.0),
+            .quad => std.math.pow(f32, timer.value, 4.0),
+        };
+    }
+
+    fn tick(self: *Self, dt: f32) void {
+        for (self.values.slice()) |*timer| {
+            timer.value = @max(timer.value - dt * timer.speed, 0.0);
+        }
+    }
+};
+
 pub const Tetris = struct {
     const Self = @This();
 
@@ -123,19 +187,27 @@ pub const Tetris = struct {
         pos: Vec2 = rt.vec2(3, 20),
     };
 
-    const anim_snap_ms = 75.0;
+    const rotate_speed = 1.0 / 250.0;
+    const translate_speed = 1.0 / 250.0;
+    const drop_ms = 1000.0; // TODO speed by level
 
     time: f32 = 0.0,
     start_ts: f32,
     last_ts: f32,
-    rotation_anim: f32 = 0.0,
-    translate_anim: Vec2 = Vec2.scalar(0.0),
+    drop_tick: f32,
 
     bm: BoardMino,
     /// guaranteed to have at least `Tetromino.count` minos at all times
     bag: std.BoundedArray(Tetromino, 2 * Tetromino.count),
     prng: std.rand.DefaultPrng,
     board: Board,
+
+    anims: Animations,
+    rotl_anim: Animations.Key,
+    rotr_anim: Animations.Key,
+    left_anim: Animations.Key,
+    right_anim: Animations.Key,
+    down_anim: Animations.Key,
 
     pub fn init(ts: f32) Self {
         var self = Self{
@@ -145,8 +217,21 @@ pub const Tetris = struct {
             .prng = std.rand.DefaultPrng.init(@as(u32, @bitCast(ts))),
             .start_ts = ts,
             .last_ts = ts,
+            .drop_tick = undefined,
+            .anims = .{},
+            .rotl_anim = undefined,
+            .rotr_anim = undefined,
+            .left_anim = undefined,
+            .right_anim = undefined,
+            .down_anim = undefined,
         };
         self.popMino();
+
+        self.rotl_anim = self.anims.register(.quad, rotate_speed);
+        self.rotr_anim = self.anims.register(.quad, rotate_speed);
+        self.left_anim = self.anims.register(.square, translate_speed);
+        self.right_anim = self.anims.register(.square, translate_speed);
+        self.down_anim = self.anims.register(.quad, translate_speed);
 
         return self;
     }
@@ -161,31 +246,48 @@ pub const Tetris = struct {
         }
     }
 
-    fn animSnap(x: f32, reduce: f32) f32 {
-        const x0 = @min(1.0, @max(0.0, @abs(x) - reduce));
-        const x1 = std.math.pow(f32, x0, 2.0);
-        return std.math.sign(x) * x1;
-    }
-
     fn tick(self: *Self, ts: f32, soft_drop: bool) void {
-        _ = soft_drop;
-
         const dt = ts - self.last_ts;
         self.last_ts = ts;
         self.time = self.last_ts - self.start_ts;
 
-        const anim_reduce = dt / anim_snap_ms;
-        self.rotation_anim = animSnap(self.rotation_anim, anim_reduce);
-        self.translate_anim.data[0][0] = animSnap(self.translate_anim.data[0][0], anim_reduce);
-        self.translate_anim.data[0][1] = animSnap(self.translate_anim.data[0][1], anim_reduce);
+        const drop_dt = if (soft_drop) dt * 2.0 else dt;
+        self.drop_tick -= drop_dt;
+        if (self.drop_tick < 0) {
+            _ = self.dropMinoOnce();
+            self.drop_tick += drop_ms;
+        }
+
+        self.anims.tick(dt);
+    }
+
+    /// returns rotation value in radians
+    fn getMinoRotation(self: *const Self) f32 {
+        const left = self.anims.get(self.rotl_anim);
+        const right = self.anims.get(self.rotr_anim);
+        return (std.math.pi / 2.0) * (right - left);
+    }
+
+    /// returns vector offset in board coordinates
+    fn getMinoOffset(self: *const Self) Vec2 {
+        const offset = rt.vec2(
+            self.anims.get(self.left_anim) - self.anims.get(self.right_anim),
+            self.anims.get(self.down_anim),
+        );
+
+        return self.bm.pos.add(offset);
     }
 
     /// ensure bag size > mino count, and pop next mino to active
     fn popMino(self: *Self) void {
         self.ensureBag();
         self.bm = .{ .mino = self.bag.orderedRemove(0) };
-        self.rotation_anim = 0.0;
-        self.translate_anim = rt.vec2(0.0, 20.0);
+        self.anims.stop(self.rotr_anim);
+        self.anims.stop(self.rotl_anim);
+        self.anims.stop(self.left_anim);
+        self.anims.stop(self.right_anim);
+        self.anims.reset(self.down_anim);
+        self.drop_tick = drop_ms;
     }
 
     // check if a move is possible based on a mino
@@ -216,10 +318,10 @@ pub const Tetris = struct {
         // TODO rotation tables
         if (self.validBoardMino(rotated)) {
             self.bm = rotated;
-            self.rotation_anim += switch (dir) {
-                .left => -1.0,
-                .right => 1.0,
-            };
+            self.anims.reset(switch (dir) {
+                .left => self.rotl_anim,
+                .right => self.rotr_anim,
+            });
             return true;
         }
         return false;
@@ -231,7 +333,15 @@ pub const Tetris = struct {
         translated.pos = translated.pos.add(v);
         if (self.validBoardMino(translated)) {
             self.bm = translated;
-            self.translate_anim = self.translate_anim.sub(v);
+            switch (std.math.order(v.data[0][0], 0.0)) {
+                .gt => self.anims.reset(self.right_anim),
+                .lt => self.anims.reset(self.left_anim),
+                else => {},
+            }
+            if (v.data[0][1] < 0.0) {
+                self.anims.reset(self.down_anim);
+            }
+
             return true;
         }
         return false;
@@ -278,10 +388,10 @@ pub const Tetris = struct {
 };
 
 const grid_scale = rt.mat4.scale(Vec3.scalar(0.4));
+const block_scale = rt.mat4.scale(Vec3.scalar(0.95));
 
 fn drawBlock(ctx: *const Context, field_pos: Vec2, color: Vec3) void {
     const grid_offset = rt.vec3(-4.5, -9.5, 0.0);
-    const block_scale = rt.mat4.scale(Vec3.scalar(0.95));
 
     const final_pos = field_pos.expandVec(3, .{0}).add(grid_offset);
 
@@ -294,7 +404,6 @@ fn drawBlock(ctx: *const Context, field_pos: Vec2, color: Vec3) void {
     ctx.camera.drawMesh(resources.block_model, mat_model, color);
 }
 
-/// TODO rotation when spinning
 fn drawMino(
     ctx: *const Context,
     mino: Tetromino,
@@ -311,14 +420,13 @@ fn drawMino(
         const grid_offset =
             rt.vec3(-4.5, -9.5, 0.0)
             .add(center.add(offset).expandVec(3, .{0.0}));
-        const block_scale = rt.mat4.scale(Vec3.scalar(0.95));
 
         const mat_model = Mat4.chain(&.{
             grid_scale,
             rt.mat4.translate(grid_offset),
-            block_scale,
-            rt.mat4.rotateZ(rot_anim * (std.math.pi / 2.0)),
+            rt.mat4.rotateZ(rot_anim),
             rt.mat4.translate(fill_offset.expandVec(3, .{0})),
+            block_scale,
         });
 
         ctx.camera.drawMesh(resources.block_model, mat_model, mino.color());
@@ -386,8 +494,8 @@ fn drawTetris(ctx: *const Context, ts: f32) void {
         ctx,
         ctx.tetris.bm.mino,
         ctx.tetris.bm.rotation,
-        ctx.tetris.rotation_anim,
-        ctx.tetris.bm.pos.add(ctx.tetris.translate_anim),
+        ctx.tetris.getMinoRotation(),
+        ctx.tetris.getMinoOffset(),
     );
 
     rt.drawBatchedText();
