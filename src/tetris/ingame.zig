@@ -127,6 +127,8 @@ const Animations = struct {
         square,
         /// start very quickly and finish very gently
         quad,
+        /// shake with intensity decreasing quadratically
+        thud,
     };
 
     const Timer = struct {
@@ -166,6 +168,7 @@ const Animations = struct {
             .linear => timer.value,
             .square => std.math.pow(f32, timer.value, 2.0),
             .quad => std.math.pow(f32, timer.value, 4.0),
+            .thud => @cos(timer.value * 4.5 * std.math.pi) * std.math.pow(f32, timer.value, 2.0),
         };
     }
 
@@ -189,8 +192,10 @@ pub const Tetris = struct {
         pos: Vec2 = rt.vec2(3, 20),
     };
 
-    const rotate_speed = 1.0 / 250.0;
-    const translate_speed = 1.0 / 250.0;
+    const rotate_speed = 1.0 / 150.0;
+    const translate_speed = 1.0 / 100.0;
+    const thud_speed = 1.0 / 100.0;
+    const thud_scale = 0.5;
     const drop_ms = 1000.0; // TODO speed by level
 
     time: f32 = 0.0,
@@ -210,6 +215,7 @@ pub const Tetris = struct {
     left_anim: Animations.Key,
     right_anim: Animations.Key,
     down_anim: Animations.Key,
+    thud_anim: Animations.Key,
 
     pub fn init(ts: f32) Self {
         var self = Self{
@@ -226,6 +232,7 @@ pub const Tetris = struct {
             .left_anim = undefined,
             .right_anim = undefined,
             .down_anim = undefined,
+            .thud_anim = undefined,
         };
         self.popMino();
 
@@ -234,6 +241,7 @@ pub const Tetris = struct {
         self.left_anim = self.anims.register(.square, translate_speed);
         self.right_anim = self.anims.register(.square, translate_speed);
         self.down_anim = self.anims.register(.quad, translate_speed);
+        self.thud_anim = self.anims.register(.thud, translate_speed);
 
         return self;
     }
@@ -290,7 +298,17 @@ pub const Tetris = struct {
             trav = next;
         }
 
-        return trav.pos;
+        const x_offset = self.anims.get(self.left_anim) - self.anims.get(self.right_anim);
+        return trav.pos.add(rt.vec2(x_offset, 0.0));
+    }
+
+    fn getThudOffset(self: *const Self) Vec2 {
+        const thud = -self.anims.get(self.thud_anim) * thud_scale;
+        return rt.vec2(0.0, thud);
+    }
+
+    fn getGridOffset(self: *const Self) Vec2 {
+        return rt.vec2(-4.5, -9.5).add(self.getThudOffset());
     }
 
     /// ensure bag size > mino count, and pop next mino to active
@@ -369,6 +387,8 @@ pub const Tetris = struct {
         }
 
         // splat mino onto board
+        self.anims.reset(self.thud_anim);
+
         var spawn = Tetromino.spawns.get(self.bm.mino);
         for (spawn.rotated(self.bm.rotation)) |offset| {
             const pos = self.bm.pos.add(offset);
@@ -408,13 +428,13 @@ const block_scale = rt.mat4.scale(Vec3.scalar(0.95));
 const BlockKind = enum { mino, ghost };
 
 fn drawBlock(ctx: *const Context, kind: BlockKind, field_pos: Vec2, color: Vec3) void {
-    const grid_offset = rt.vec3(-4.5, -9.5, 0.0);
+    const grid_offset = ctx.tetris.getGridOffset();
 
-    const final_pos = field_pos.expandVec(3, .{0}).add(grid_offset);
+    const final_pos = field_pos.add(grid_offset);
 
     const mat_model = Mat4.chain(&.{
         grid_scale,
-        rt.mat4.translate(final_pos),
+        rt.mat4.translate(final_pos.expandVec(3, .{0})),
         block_scale,
     });
 
@@ -434,18 +454,17 @@ fn drawMino(
     offset: Vec2,
 ) void {
     const spawn = Tetromino.spawns.get(mino);
+    const grid_offset = ctx.tetris.getGridOffset();
 
     for (spawn.rotated(rot)) |fill| {
         const center = vec2FromCoord(spawn.box).sub(Vec2.scalar(1.0)).divScalar(2.0);
         const fill_offset = fill.sub(center);
 
-        const grid_offset =
-            rt.vec3(-4.5, -9.5, 0.0)
-            .add(center.add(offset).expandVec(3, .{0.0}));
+        const centered_grid_offset = grid_offset.add(center).add(offset);
 
         const mat_model = Mat4.chain(&.{
             grid_scale,
-            rt.mat4.translate(grid_offset),
+            rt.mat4.translate(centered_grid_offset.expandVec(3, .{0.0})),
             rt.mat4.rotateZ(rot_anim),
             rt.mat4.translate(fill_offset.expandVec(3, .{0})),
             block_scale,
@@ -461,6 +480,8 @@ fn drawMino(
 fn drawTetris(ctx: *const Context, ts: f32) void {
     rt.drawBackground(resources.plaid_bg, ts);
 
+    const thud_offset = ctx.tetris.getThudOffset().expandVec(3, .{0});
+
     // container
     const lab_blue = comptime oklab.oklabFromSrgb(rt.vec3(0.0, 0.0, 1.0));
     const lab_magenta = comptime oklab.oklabFromSrgb(rt.vec3(1.0, 0.0, 1.0));
@@ -468,14 +489,15 @@ fn drawTetris(ctx: *const Context, ts: f32) void {
         lab_blue,
         lab_magenta,
         Vec3.scalar((@cos(ts * 1e-3) + 1.0) / 2.0),
-    ).mulElements(rt.vec3(0.1, 1.0, 1.0));
+    ).mulElements(rt.vec3(0.5, 1.0, 1.0));
     const container_color = oklab.srgbFromOklab(container_lab_color);
 
+    const container_offset = rt.vec3(0.0, -10.0, 0.0).add(thud_offset);
     ctx.camera.drawMesh(
         resources.container_model,
         Mat4.chain(&.{
             grid_scale,
-            rt.mat4.translate(rt.vec3(0.0, -10.0, 0.0)),
+            rt.mat4.translate(container_offset),
         }),
         container_color,
     );
@@ -489,9 +511,10 @@ fn drawTetris(ctx: *const Context, ts: f32) void {
         var buf: [32]u8 = undefined;
         const text = std.fmt.bufPrint(&buf, "{d}:{d:0>2}", .{ minutes, seconds }) catch unreachable;
 
+        const text_offset = rt.vec3(-7.0, 10.0, 0.0).add(thud_offset);
         const mat_text = Mat4.chain(&.{
             grid_scale,
-            rt.mat4.translate(rt.vec3(-7.0, 10.0, 0.0)),
+            rt.mat4.translate(text_offset),
             rt.mat4.scale(Vec3.scalar(2.0)),
         });
 

@@ -9,7 +9,7 @@ out vec4 fragColor;
 
 void main(void) {
     vec3 lightDir = vec3(0.0, 0.0, -1.0);
-    float ambient = 0.3;
+    float ambient = 0.8;
 
     float l = dot(vNormal, -lightDir);
     l = ambient + l * (1.0 - ambient);
