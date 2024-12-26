@@ -405,9 +405,9 @@ pub const Camera = struct {
             @panic("FUCK math is broken");
         }
 
-        const mx = pos.data[0][0];
-        const my = pos.data[0][1];
-        return mx > rect.x and mx < rect.x + rect.width and
-            my > rect.y and my < rect.y + rect.height;
+        const mx = pos.data[0][0] - rect.x;
+        const my = pos.data[0][1] - rect.y;
+        return mx > 0.0 and mx < rect.width and
+            my > 0.0 and my < rect.height;
     }
 };

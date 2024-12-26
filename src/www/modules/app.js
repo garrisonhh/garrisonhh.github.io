@@ -290,24 +290,24 @@ const env = {
      */
     measureText(textPtr, textLen, outRectPtr) {
         const text = readString(textPtr, textLen);
-        const v = [
+        const bests = [
             Infinity,
             Infinity,
-            0,
-            0,
+            -Infinity,
+            -Infinity,
         ];
         for (const { dst } of font.typeset(text)) {
-            v[0] = Math.min(v[0], dst[0]);
-            v[1] = Math.min(v[1], dst[1]);
-            v[2] = Math.max(v[2], dst[0] + dst[2]);
-            v[3] = Math.max(v[3], dst[1] + dst[3]);
+            bests[0] = Math.min(bests[0], dst[0]);
+            bests[1] = Math.min(bests[1], dst[1]);
+            bests[2] = Math.max(bests[2], dst[2] + dst[0]);
+            bests[3] = Math.max(bests[3], dst[3] + dst[1]);
         }
 
         viewFloat32Array(outRectPtr, 4).set([
-            v[0],
-            v[1],
-            v[2] - v[0],
-            v[3] - v[1],
+            bests[0],
+            bests[1],
+            bests[2] - bests[0],
+            bests[3] - bests[1],
         ]);
     },
 

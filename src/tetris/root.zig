@@ -28,6 +28,7 @@ pub const Context = struct {
     state: State = .intro,
     camera: rt.Camera,
     input: rt.Input = .{},
+    debris: intro.Debris = .{},
     tetris: ingame.Tetris = undefined,
 
     fn init(camera_pos: rt.Vec3, camera_target: rt.Vec3) Context {

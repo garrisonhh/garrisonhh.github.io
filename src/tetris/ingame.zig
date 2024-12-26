@@ -8,109 +8,11 @@ const Vec3 = rt.Vec3;
 const Mat3 = rt.Matrix(3, 3);
 const Mat4 = rt.Mat4;
 const oklab = @import("oklab.zig");
+const Tetromino = @import("mino.zig").Tetromino;
 
 fn vec2FromCoord(coord: [2]u8) Vec2 {
     return rt.vec2(@floatFromInt(coord[0]), @floatFromInt(coord[1]));
 }
-
-const Tetromino = enum {
-    pub const count: comptime_int = std.enums.values(@This()).len;
-
-    const ghost_color = oklab.srgbFromOklab(rt.vec3(0.5, 0.0, 0.0));
-
-    O,
-    I,
-    J,
-    L,
-    S,
-    T,
-    Z,
-
-    const Rotation = enum(u2) {
-        zero,
-        right,
-        two,
-        left,
-
-        fn rotateRight(rot: Rotation) Rotation {
-            return @enumFromInt(@intFromEnum(rot) +% 1);
-        }
-
-        fn rotateLeft(rot: Rotation) Rotation {
-            return @enumFromInt(@intFromEnum(rot) +% 3);
-        }
-    };
-
-    /// specifies location of tetromino at spawn (and indirectly its rotation center)
-    /// - tetromino is spawned its box's bottom left corner at the spawn offset
-    /// - tetromino rotates its filled points around the box center
-    const Spawn = struct {
-        box: [2]u8,
-        filled: [4][2]u8,
-
-        // get coords with this rotation
-        fn rotated(spawn: Spawn, rot: Rotation) [4]Vec2 {
-            const center = vec2FromCoord(spawn.box).sub(Vec2.scalar(1.0)).divScalar(2.0);
-
-            var res: [4]Vec2 = undefined;
-            for (&res, spawn.filled) |*out, fill| {
-                var pos = vec2FromCoord(fill);
-                pos = pos.sub(center);
-
-                const x, const y = pos.data[0];
-                pos.data[0] = switch (rot) {
-                    .zero => .{ x, y },
-                    .right => .{ y, -x },
-                    .two => .{ -x, -y },
-                    .left => .{ -y, x },
-                };
-
-                pos = pos.add(center);
-                out.* = pos;
-            }
-
-            return res;
-        }
-    };
-
-    const spawns = std.EnumArray(Tetromino, Spawn).init(.{
-        .O = .{
-            .box = .{ 4, 2 },
-            .filled = .{ .{ 1, 0 }, .{ 2, 0 }, .{ 1, 1 }, .{ 2, 1 } },
-        },
-        .I = .{
-            .box = .{ 4, 4 },
-            .filled = .{ .{ 0, 1 }, .{ 1, 1 }, .{ 2, 1 }, .{ 3, 1 } },
-        },
-        .J = .{
-            .box = .{ 3, 3 },
-            .filled = .{ .{ 0, 0 }, .{ 0, 1 }, .{ 1, 1 }, .{ 2, 1 } },
-        },
-        .L = .{
-            .box = .{ 3, 3 },
-            .filled = .{ .{ 2, 0 }, .{ 0, 1 }, .{ 1, 1 }, .{ 2, 1 } },
-        },
-        .S = .{
-            .box = .{ 3, 3 },
-            .filled = .{ .{ 1, 0 }, .{ 2, 0 }, .{ 0, 1 }, .{ 1, 1 } },
-        },
-        .T = .{
-            .box = .{ 3, 3 },
-            .filled = .{ .{ 1, 0 }, .{ 0, 1 }, .{ 1, 1 }, .{ 2, 1 } },
-        },
-        .Z = .{
-            .box = .{ 3, 3 },
-            .filled = .{ .{ 0, 0 }, .{ 1, 0 }, .{ 1, 1 }, .{ 2, 1 } },
-        },
-    });
-
-    fn color(mino: Tetromino) Vec3 {
-        return oklab.srgbFromOklab(rt.mat4.transform(
-            rt.mat4.rotateX((@as(f32, @floatFromInt(@intFromEnum(mino))) / 7.0) * std.math.pi * 2.0),
-            rt.vec3(0.5, 0.3, 0.0),
-        ));
-    }
-};
 
 /// tracks animation values with different linear transformations
 ///
@@ -214,6 +116,7 @@ pub const Tetris = struct {
     rotr_anim: Animations.Key,
     left_anim: Animations.Key,
     right_anim: Animations.Key,
+    up_anim: Animations.Key,
     down_anim: Animations.Key,
     thud_anim: Animations.Key,
 
@@ -231,6 +134,7 @@ pub const Tetris = struct {
             .rotr_anim = undefined,
             .left_anim = undefined,
             .right_anim = undefined,
+            .up_anim = undefined,
             .down_anim = undefined,
             .thud_anim = undefined,
         };
@@ -240,6 +144,7 @@ pub const Tetris = struct {
         self.rotr_anim = self.anims.register(.quad, rotate_speed);
         self.left_anim = self.anims.register(.square, translate_speed);
         self.right_anim = self.anims.register(.square, translate_speed);
+        self.up_anim = self.anims.register(.quad, translate_speed);
         self.down_anim = self.anims.register(.quad, translate_speed);
         self.thud_anim = self.anims.register(.thud, translate_speed);
 
@@ -282,7 +187,7 @@ pub const Tetris = struct {
     fn getMinoOffset(self: *const Self) Vec2 {
         const offset = rt.vec2(
             self.anims.get(self.left_anim) - self.anims.get(self.right_anim),
-            self.anims.get(self.down_anim),
+            self.anims.get(self.down_anim) - self.anims.get(self.up_anim),
         );
 
         return self.bm.pos.add(offset);
@@ -319,6 +224,7 @@ pub const Tetris = struct {
         self.anims.stop(self.rotl_anim);
         self.anims.stop(self.left_anim);
         self.anims.stop(self.right_anim);
+        self.anims.stop(self.up_anim);
         self.anims.reset(self.down_anim);
         self.drop_tick = drop_ms;
     }
@@ -348,16 +254,44 @@ pub const Tetris = struct {
             .left => self.bm.rotation.rotateLeft(),
             .right => self.bm.rotation.rotateRight(),
         };
-        // TODO rotation tables
-        if (self.validBoardMino(rotated)) {
-            self.bm = rotated;
-            self.anims.reset(switch (dir) {
-                .left => self.rotl_anim,
-                .right => self.rotr_anim,
-            });
-            return true;
+        rt.print("ROTATE {} ({} -> {})", .{ dir, self.bm.rotation, rotated.rotation });
+
+        const kick: Vec2 = kick: {
+            if (self.validBoardMino(rotated)) {
+                break :kick Vec2.zeroes();
+            }
+
+            for (rotated.mino.getKicks(self.bm.rotation, rotated.rotation)) |offset| {
+                var kicked = rotated;
+                kicked.pos = kicked.pos.add(offset);
+                if (self.validBoardMino(kicked)) {
+                    rotated = kicked;
+                    break :kick offset;
+                }
+            }
+
+            // no valid rotation + offset found
+            return false;
+        };
+
+        // found valid rotation + offset
+        self.anims.reset(switch (dir) {
+            .left => self.rotl_anim,
+            .right => self.rotr_anim,
+        });
+        switch (std.math.order(kick.data[0][0], 0)) {
+            .gt => self.anims.reset(self.right_anim),
+            .lt => self.anims.reset(self.left_anim),
+            .eq => {},
         }
-        return false;
+        switch (std.math.order(kick.data[0][1], 0)) {
+            .gt => self.anims.reset(self.up_anim),
+            .lt => self.anims.reset(self.down_anim),
+            .eq => {},
+        }
+
+        self.bm = rotated;
+        return true;
     }
 
     /// returns success

@@ -4,6 +4,9 @@ const color = app.color;
 const resources = app.resources;
 const Context = app.Context;
 const rt = @import("runtime");
+const Tetromino = @import("mino.zig").Tetromino;
+
+pub const Debris = struct {};
 
 pub fn viewIntro(ctx: *Context, ts: f32) void {
     // logo transformations
