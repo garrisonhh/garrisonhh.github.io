@@ -16,6 +16,8 @@ fn vec2FromCoord(coord: [2]u8) Vec2 {
 const Tetromino = enum {
     pub const count: comptime_int = std.enums.values(@This()).len;
 
+    const ghost_color = oklab.srgbFromOklab(rt.vec3(0.5, 0.0, 0.0));
+
     O,
     I,
     J,
@@ -278,6 +280,19 @@ pub const Tetris = struct {
         return self.bm.pos.add(offset);
     }
 
+    /// calculates ghost offset
+    fn findGhostOffset(self: *const Self) Vec2 {
+        var trav = self.bm;
+        while (true) {
+            var next = trav;
+            next.pos = next.pos.add(rt.vec2(0.0, -1.0));
+            if (!self.validBoardMino(next)) break;
+            trav = next;
+        }
+
+        return trav.pos;
+    }
+
     /// ensure bag size > mino count, and pop next mino to active
     fn popMino(self: *Self) void {
         self.ensureBag();
@@ -390,7 +405,9 @@ pub const Tetris = struct {
 const grid_scale = rt.mat4.scale(Vec3.scalar(0.4));
 const block_scale = rt.mat4.scale(Vec3.scalar(0.95));
 
-fn drawBlock(ctx: *const Context, field_pos: Vec2, color: Vec3) void {
+const BlockKind = enum { mino, ghost };
+
+fn drawBlock(ctx: *const Context, kind: BlockKind, field_pos: Vec2, color: Vec3) void {
     const grid_offset = rt.vec3(-4.5, -9.5, 0.0);
 
     const final_pos = field_pos.expandVec(3, .{0}).add(grid_offset);
@@ -401,11 +418,16 @@ fn drawBlock(ctx: *const Context, field_pos: Vec2, color: Vec3) void {
         block_scale,
     });
 
-    ctx.camera.drawMesh(resources.block_model, mat_model, color);
+    const mesh = switch (kind) {
+        .mino => resources.block_model,
+        .ghost => resources.ghost_model,
+    };
+    ctx.camera.drawMesh(mesh, mat_model, color);
 }
 
 fn drawMino(
     ctx: *const Context,
+    kind: BlockKind,
     mino: Tetromino,
     rot: Tetromino.Rotation,
     rot_anim: f32,
@@ -429,7 +451,10 @@ fn drawMino(
             block_scale,
         });
 
-        ctx.camera.drawMesh(resources.block_model, mat_model, mino.color());
+        switch (kind) {
+            .mino => ctx.camera.drawMesh(resources.block_model, mat_model, mino.color()),
+            .ghost => ctx.camera.drawMesh(resources.ghost_model, mat_model, Tetromino.ghost_color),
+        }
     }
 }
 
@@ -479,23 +504,34 @@ fn drawTetris(ctx: *const Context, ts: f32) void {
     // next 2 minos in bag
     for (0..2) |i| {
         const mino = ctx.tetris.bag.get(i);
-        drawMino(ctx, mino, .zero, 0.0, rt.vec2(12.0, 18.0 - @as(f32, @floatFromInt(i)) * 4.0));
+        const offset = rt.vec2(12.0, 18.0 - @as(f32, @floatFromInt(i)) * 4.0);
+        drawMino(ctx, .mino, mino, .zero, 0.0, offset);
     }
 
     // tetris board + mino
     for (0..Tetris.board_height) |y| {
         for (0..Tetris.board_width) |x| {
             const mino = ctx.tetris.board[y][x] orelse continue;
-            drawBlock(ctx, rt.vec2(@floatFromInt(x), @floatFromInt(y)), mino.color());
+            drawBlock(ctx, .mino, rt.vec2(@floatFromInt(x), @floatFromInt(y)), mino.color());
         }
     }
 
     drawMino(
         ctx,
+        .mino,
         ctx.tetris.bm.mino,
         ctx.tetris.bm.rotation,
         ctx.tetris.getMinoRotation(),
         ctx.tetris.getMinoOffset(),
+    );
+
+    drawMino(
+        ctx,
+        .ghost,
+        ctx.tetris.bm.mino,
+        ctx.tetris.bm.rotation,
+        ctx.tetris.getMinoRotation(),
+        ctx.tetris.findGhostOffset(),
     );
 
     rt.drawBatchedText();

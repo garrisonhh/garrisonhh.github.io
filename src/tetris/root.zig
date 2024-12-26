@@ -15,6 +15,7 @@ pub const resources = struct {
     pub var plaid_bg: rt.BackgroundShader = undefined;
     pub var logo_model: rt.Mesh = undefined;
     pub var block_model: rt.Mesh = undefined;
+    pub var ghost_model: rt.Mesh = undefined;
     pub var container_model: rt.Mesh = undefined;
 };
 
@@ -52,6 +53,7 @@ export fn init() void {
     resources.plaid_bg = rt.must(rt.loadBackground(@embedFile("shaders/plaid-bg.frag")));
     resources.logo_model = rt.must(rt.loadMesh(@embedFile("models/tetris2000.obj")));
     resources.block_model = rt.must(rt.loadMesh(@embedFile("models/tetromino-block.obj")));
+    resources.ghost_model = rt.must(rt.loadMesh(@embedFile("models/ghost-block.obj")));
     resources.container_model = rt.must(rt.loadMesh(@embedFile("models/container.obj")));
 
     context = Context.init(rt.vec3(0.0, 0.0, 10.0), rt.Vec3.scalar(0.0));
